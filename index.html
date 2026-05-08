@@ -462,8 +462,8 @@
     //  字段映射表（从 Python config.py 移植）
     // ═══════════════════════════════════════════════════════════
     const FIELD_ALIASES = {
-        order_id: ["订单号","订单编号","单号","交易单号","单据编号","order id","order_no","orderno","order no","order_no_","order_number","order_num"],
-        order_date: ["下单日期","订单日期","交易日期","日期","下单时间","订单时间","成交日期","创建日期","下单日","order date","transaction date","date","created_at","create_date","order_time","trade_date"],
+        order_id: ["订单号","订单编号","单号","交易单号","单据编号","order id","order_no","orderno","order no","order_no_","order_number","order_num","设备代码","设备编号","device_code","device_id","设备号"],
+        order_date: ["下单日期","订单日期","交易日期","日期","下单时间","订单时间","成交日期","创建日期","下单日","order date","transaction date","date","created_at","create_date","order_time","trade_date","设备时间","上报时间","数据时间","device_time","timestamp","time"],
         customer_name: ["客户名称","经销商","门店名称","客户","经销商名称","门店","买家名称","买家","客户名","customer name","dealer","store name","client","buyer_name","buyer","customer","dealer_name"],
         region: ["区域","地区","省份","大区","城市","所属区域","所在地区","销售区域","省份/城市","region","area","province","territory","city","district","location"],
         product_name: ["商品名称","产品名称","品名","货品","商品","商品名","货品名称","商品全称","product name","item name","sku name","goods_name","product","item","sku_name","goods"],
@@ -640,6 +640,32 @@
         return { data: filtered, log, stats };
     }
 
+    // 过滤掉 100% 缺失的列（合作方、备注等全空字段）
+    function cleanRawDataFilterMissing(data) {
+        if (data.length === 0) return data;
+        const cols = Object.keys(data[0]);
+        const missingCols = new Set();
+        for (const col of cols) {
+            let allMissing = true;
+            for (const r of data) {
+                const val = r[col];
+                if (val != null && val !== '' && val !== '未知' && val !== 0) {
+                    allMissing = false;
+                    break;
+                }
+            }
+            if (allMissing) missingCols.add(col);
+        }
+        if (missingCols.size === 0) return data;
+        return data.map(r => {
+            const newRow = {};
+            for (const [k, v] of Object.entries(r)) {
+                if (!missingCols.has(k)) newRow[k] = v;
+            }
+            return newRow;
+        });
+    }
+
     // ═══════════════════════════════════════════════════════════
     //  列类型检测
     // ═══════════════════════════════════════════════════════════
@@ -657,6 +683,28 @@
             types[col] = numCount / sample.length > 0.8 ? 'number' : 'text';
         }
         return types;
+    }
+
+    // 自动检测日期列（当 order_date 未映射时）
+    function detectDateColumn(data) {
+        if (data.length === 0) return null;
+        const cols = Object.keys(data[0]);
+        for (const col of cols) {
+            // 跳过已经是标准字段的
+            if (col === 'order_date') continue;
+            let dateCount = 0;
+            const sample = data.slice(0, Math.min(30, data.length));
+            for (const r of sample) {
+                const val = String(r[col] ?? '').trim();
+                if (!val) continue;
+                // 尝试解析
+                let d = val.replace(/[年月]/g, '-').replace(/日$/g, '').replace(/-{2,}/g, '-').replace(/[/\s]+/g, '');
+                if (/^\d{8}$/.test(d)) d = d.slice(0,4) + '-' + d.slice(4,6) + '-' + d.slice(6,8);
+                if (!isNaN(new Date(d).getTime())) dateCount++;
+            }
+            if (dateCount / sample.length > 0.7) return col;
+        }
+        return null;
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -708,14 +756,19 @@
     //  分析引擎
     // ═══════════════════════════════════════════════════════════
     function analyzeTrend(data, granularity) {
-        if (!data.length || !('order_date' in data[0]) || !('sales_amount' in data[0])) return null;
+        if (!data.length) return null;
+
+        // 确定日期列和金额列
+        const dateCol = ('order_date' in data[0]) ? 'order_date' : detectDateColumn(data);
+        const salesCol = ('sales_amount' in data[0]) ? 'sales_amount' : null;
+        if (!dateCol || !salesCol) return null;
 
         // 自动推荐粒度
         if (granularity === 'auto') {
-            const dates = data.filter(r => r.order_date instanceof Date).map(r => r.order_date);
-            if (dates.length > 0) {
-                const min = new Date(Math.min(...dates.map(d => d.getTime())));
-                const max = new Date(Math.max(...dates.map(d => d.getTime())));
+            const validDates = data.filter(r => r[dateCol] instanceof Date).map(r => r[dateCol]);
+            if (validDates.length > 0) {
+                const min = new Date(Math.min(...validDates.map(d => d.getTime())));
+                const max = new Date(Math.max(...validDates.map(d => d.getTime())));
                 const spanDays = (max - min) / (1000 * 60 * 60 * 24);
                 if (spanDays > 180) granularity = 'month';
                 else if (spanDays > 30) granularity = 'week';
@@ -726,55 +779,111 @@
         // 按粒度聚合
         const periodMap = {};
         for (const r of data) {
-            if (!(r.order_date instanceof Date)) continue;
+            const dateVal = r[dateCol];
+            if (!(dateVal instanceof Date)) continue;
             let periodKey;
             if (granularity === 'week') {
-                const d = new Date(r.order_date);
+                const d = new Date(dateVal);
                 const dayOfWeek = d.getDay();
                 const diff = d.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
                 const monday = new Date(d.setDate(diff));
                 periodKey = monday.toISOString().slice(0, 10);
             } else if (granularity === 'month') {
-                periodKey = r.order_date.toISOString().slice(0, 7);
+                periodKey = dateVal.toISOString().slice(0, 7);
             } else {
-                periodKey = r.order_date.toISOString().slice(0, 10);
+                periodKey = dateVal.toISOString().slice(0, 10);
             }
-            if (!periodMap[periodKey]) periodMap[periodKey] = { sales: 0, orders: new Set() };
-            periodMap[periodKey].sales += parseFloat(r.sales_amount) || 0;
-            periodMap[periodKey].orders.add(r.order_id);
+            if (!periodMap[periodKey]) periodMap[periodKey] = { sales: 0, count: 0 };
+            periodMap[periodKey].sales += parseFloat(salesCol ? r[salesCol] : 0) || 0;
+            periodMap[periodKey].count++;
         }
 
         const periods = Object.keys(periodMap).sort();
         const sales = periods.map(p => Math.round(periodMap[p].sales));
-        const orders = periods.map(p => periodMap[p].orders.size);
+        const counts = periods.map(p => periodMap[p].count);
 
         // 环比
         const mom = sales.map((s, i) => i === 0 ? null : ((s - sales[i-1]) / Math.max(sales[i-1], 1) * 100));
 
-        // 异常波动（>15%）
+        // 异常波动检测：下降 >30% 或连续 3 天收入为 0
         const anomalies = [];
+        let zeroStreak = 0;
+
         periods.forEach((p, i) => {
-            if (mom[i] != null && Math.abs(mom[i]) > 15) {
-                anomalies.push({ date: p, sales: sales[i], rate: Math.round(mom[i] * 10) / 10, direction: mom[i] > 0 ? 'up' : 'down' });
+            // 下降超过 30%
+            if (mom[i] != null && mom[i] < -30) {
+                const region = detectRegionForPeriod(data, dateCol, p, periodMap);
+                anomalies.push({
+                    date: p,
+                    sales: sales[i],
+                    rate: Math.round(mom[i] * 10) / 10,
+                    direction: 'down',
+                    region: region || '',
+                    reason: '下降超30%'
+                });
+            }
+
+            // 连续零收入
+            if (sales[i] === 0) {
+                zeroStreak++;
+                if (zeroStreak >= 3) {
+                    const region = detectRegionForPeriod(data, dateCol, p, periodMap);
+                    // 只在第3天及之后添加一次
+                    if (!anomalies.some(a => a.reason === '连续3天零收入' && a.date === p)) {
+                        anomalies.push({
+                            date: p,
+                            sales: 0,
+                            rate: -100,
+                            direction: 'down',
+                            region: region || '',
+                            reason: '连续3天零收入'
+                        });
+                    }
+                }
+            } else {
+                zeroStreak = 0;
             }
         });
 
         const totalSales = sales.reduce((a, b) => a + b, 0);
-        const totalOrders = orders.reduce((a, b) => a + b, 0);
+        const totalRecords = counts.reduce((a, b) => a + b, 0);
         const latestMom = mom.filter(m => m !== null).pop() || 0;
+
+        // 计算天数（用于日均）
+        const days = periods.length || 1;
 
         return {
             granularity,
-            chart: { periods, sales, orders, mom: mom.map(m => m == null ? null : Math.round(m * 10) / 10) },
+            chart: { periods, sales, counts, mom: mom.map(m => m == null ? null : Math.round(m * 10) / 10) },
             anomalies,
             summary: {
                 total_sales: totalSales,
-                total_orders: totalOrders,
-                avg_order: Math.round(totalSales / Math.max(totalOrders, 1)),
+                total_records: totalRecords,
+                avg_order: Math.round(totalSales / Math.max(totalRecords, 1)),
                 latest_mom: Math.round(latestMom * 10) / 10,
                 period_count: periods.length,
+                daily_avg: Math.round(totalSales / Math.max(days, 1)),
             }
         };
+    }
+
+    // 检测某周期数据所属区域
+    function detectRegionForPeriod(data, dateCol, periodKey, periodMap) {
+        if (!('region' in data[0])) return '';
+        // 匹配该周期的数据
+        const periodDates = new Set();
+        for (const r of data) {
+            if (!(r[dateCol] instanceof Date)) continue;
+            let pk;
+            if (periodKey.length === 7) { // month
+                pk = r[dateCol].toISOString().slice(0, 7);
+            } else {
+                pk = r[dateCol].toISOString().slice(0, 10);
+            }
+            if (pk === periodKey) periodDates.add(r.region);
+        }
+        const regions = [...periodDates].filter(Boolean);
+        return regions.length > 0 ? regions.slice(0, 3).join(', ') : '';
     }
 
     function analyzeDealer(data) {
@@ -1039,7 +1148,7 @@
 
         // 数据清洗
         const cleanResult = cleanRawData(rows, fieldMapping);
-        cleanData = cleanResult.data;
+        cleanData = cleanRawDataFilterMissing(cleanResult.data);
         columnTypes = detectColumnTypes(cleanData);
 
         // 显示状态
@@ -1181,13 +1290,26 @@
         const trend = data.trend || {};
         const dealer = data.dealer || {};
 
+        // 判断是经销商模式还是设备模式
+        const isDeviceMode = !dealer.summary || dealer.summary.total_dealers === 0;
+        const entityLabel = isDeviceMode ? '设备' : '经销商';
+        const entityCount = isDeviceMode
+            ? (cleanData.length > 0 ? [...new Set(cleanData.map(r => r.order_id ?? r.customer_name).filter(Boolean))].length : 0)
+            : (dealer.summary?.total_dealers || 0);
+
+        const totalSales = s.total_sales || trend.summary?.total_sales || 0;
+        const totalRecords = s.total_orders || trend.summary?.total_records || 0;
+        const dailyAvg = trend.summary?.daily_avg || 0;
+        const avgOrder = trend.summary?.avg_order || 0;
+        const latestMom = trend.summary?.latest_mom || 0;
+
         const kpis = [
-            { label: '总销售额', value: (s.total_sales || trend.summary?.total_sales || 0).toLocaleString(), unit: '元', color: '', sub: `${s.total_orders || trend.summary?.total_orders || 0} 笔订单` },
-            { label: '订单数', value: (s.total_orders || trend.summary?.total_orders || 0).toLocaleString(), unit: '笔', color: 'green', sub: `${dealer.summary?.total_dealers || 0} 家经销商` },
-            { label: '平均客单价', value: (trend.summary?.avg_order || 0).toLocaleString(), unit: '元', color: 'blue', sub: '按订单平均' },
-            { label: '环比变化', value: `${trend.summary?.latest_mom >= 0 ? '+' : ''}${trend.summary?.latest_mom || 0}%`, unit: '', color: (trend.summary?.latest_mom || 0) >= 0 ? 'green' : 'red', sub: '最近一期' },
+            { label: '总销售额', value: totalSales.toLocaleString(), unit: '元', color: '', sub: `日均 ${dailyAvg.toLocaleString()} 元 | 环比 ${latestMom >= 0 ? '+' : ''}${latestMom}%` },
+            { label: '记录数', value: totalRecords.toLocaleString(), unit: '条', color: 'green', sub: `${entityCount} 个${entityLabel}` },
+            { label: '单机/单均营收', value: avgOrder.toLocaleString(), unit: '元', color: 'blue', sub: isDeviceMode ? '按记录平均' : '按订单平均' },
+            { label: '环比变化', value: `${latestMom >= 0 ? '+' : ''}${latestMom}%`, unit: '', color: latestMom >= 0 ? 'green' : 'red', sub: '最近一期' },
             { label: '头部集中度', value: `${dealer.summary?.cr_rate || 0}%`, unit: '', color: (dealer.summary?.cr_rate || 0) > 70 ? 'orange' : '', sub: `CR${dealer.summary?.cr_n || 10}` },
-            { label: '静默客户', value: `${(dealer.summary?.silent_long || 0) + (dealer.summary?.silent_short || 0)}`, unit: '家', color: ((dealer.summary?.silent_long || 0) + (dealer.summary?.silent_short || 0)) > 5 ? 'red' : 'purple', sub: `${dealer.summary?.silent_long || 0} 家超60天` },
+            { label: '静默客户', value: `${(dealer.summary?.silent_long || 0) + (dealer.summary?.silent_short || 0)}`, unit: '个', color: ((dealer.summary?.silent_long || 0) + (dealer.summary?.silent_short || 0)) > 5 ? 'red' : 'purple', sub: `${dealer.summary?.silent_long || 0} 个超60天` },
         ];
 
         row.innerHTML = kpis.map(k => `
@@ -1210,24 +1332,29 @@
             const t = data.trend.chart;
             charts.chartTrend.setOption({
                 grid, color: colorPalette,
-                legend: { data: ['销售额', '订单数'], right: 10, top: 2, textStyle: { fontSize: 11, color: '#374151' } },
+                legend: {
+                    data: ['销售额', '记录数'],
+                    right: 10, top: 2,
+                    textStyle: { fontSize: 11, color: '#374151' },
+                    selected: { '销售额': true, '记录数': true },
+                },
                 tooltip,
                 xAxis: { type: 'category', data: t.periods, axisLine: { lineStyle: { color: '#D1D5DB' } }, axisLabel, axisTick: { show: false } },
                 yAxis: [
-                    { type: 'value', name: '销售额', splitLine: { lineStyle: { color: '#F0F2F5' } }, axisLabel: { fontSize: 11, color: '#374151' }, nameTextStyle: { color: '#6B7280' } },
-                    { type: 'value', name: '订单数', splitLine: { show: false }, axisLabel: { fontSize: 11, color: '#374151' }, nameTextStyle: { color: '#6B7280' } }
+                    { type: 'value', name: '销售额', splitLine: { lineStyle: { color: '#F0F2F5' } }, axisLabel: { fontSize: 11, color: '#374151' }, nameTextStyle: { color: '#6B7280' }, scale: true },
+                    { type: 'value', name: '记录数', splitLine: { show: false }, axisLabel: { fontSize: 11, color: '#374151' }, nameTextStyle: { color: '#6B7280' }, scale: true }
                 ],
                 series: [
                     { name: '销售额', type: 'line', data: t.sales, smooth: true, areaStyle: { opacity: 0.12 }, symbol: 'circle', symbolSize: 5 },
-                    { name: '订单数', type: 'bar', data: t.orders, barWidth: '30%', yAxisIndex: 1, itemStyle: { opacity: 0.35 } }
+                    { name: '记录数', type: 'bar', data: t.counts, barWidth: '30%', yAxisIndex: 1, itemStyle: { opacity: 0.35 } }
                 ],
             });
             charts.chartTrend.resize();
-            const s = data.trend.summary;
-            const cls = s.latest_mom >= 0 ? 'up' : 'down';
-            const arr = s.latest_mom >= 0 ? '↑' : '↓';
+            const summary = data.trend.summary;
+            const cls = summary.latest_mom >= 0 ? 'up' : 'down';
+            const arr = summary.latest_mom >= 0 ? '↑' : '↓';
             document.getElementById('metricTrend').innerHTML =
-                `总销售额 <b>${s.total_sales.toLocaleString()}</b> | 订单 <b>${s.total_orders}</b> 笔 | 最近一期 <span class="${cls}">${arr} ${Math.abs(s.latest_mom)}%</span>`;
+                `总销售额 <b>${summary.total_sales.toLocaleString()}</b> 元 | 记录 <b>${summary.total_records}</b> 条 | 日均 <b>${summary.daily_avg.toLocaleString()}</b> 元 | 最近一期 <span class="${cls}">${arr} ${Math.abs(summary.latest_mom)}%</span>`;
         }
 
         // 经销商帕累托
@@ -1344,8 +1471,12 @@
         }
 
         if (data.trend?.anomalies?.length) {
-            const anomalies = data.trend.anomalies.slice(0, 5);
-            html.push(`<div class="alert-block"><h4 class="blue">⚡ 异常波动记录</h4>${anomalies.map(a => `<div class="alert-item"><span>${a.date}</span><span class="alert-val ${a.direction === 'up' ? 'up' : 'down'}">${a.direction === 'up' ? '↑' : '↓'} ${Math.abs(a.rate)}%</span></div>`).join('')}</div>`);
+            const anomalies = data.trend.anomalies.slice(0, 8);
+            html.push(`<div class="alert-block"><h4 class="blue">⚡ 异常波动记录</h4>${anomalies.map(a => {
+                const regionStr = a.region ? ` | ${a.region}` : '';
+                const reasonStr = a.reason ? ` (${a.reason})` : '';
+                return `<div class="alert-item"><span>${a.date}${regionStr}${reasonStr}</span><span class="alert-val ${a.direction === 'up' ? 'up' : 'down'}">${a.direction === 'up' ? '↑' : '↓'} ${Math.abs(a.rate)}%</span></div>`;
+            }).join('')}</div>`);
         }
 
         if (html.length) {
@@ -1360,10 +1491,10 @@
         const all = [];
         if (data.trend?.summary) {
             const s = data.trend.summary;
-            all.push(`📊 数据跨度 ${s.period_count} 个周期，总销售额 ${s.total_sales.toLocaleString()} 元，共 ${s.total_orders} 笔订单，平均客单价 ${s.avg_order.toLocaleString()} 元`);
+            all.push(`📊 数据跨度 ${s.period_count} 个周期，总销售额 ${s.total_sales.toLocaleString()} 元，共 ${s.total_records} 条记录，平均 ${s.avg_order.toLocaleString()} 元/条`);
             if (s.latest_mom !== 0) all.push(`📈 最近一期环比 ${s.latest_mom > 0 ? '增长' : '下降'} ${Math.abs(s.latest_mom)}%`);
         }
-        if (data.dealer?.summary) {
+        if (data.dealer?.summary && data.dealer.summary.total_dealers > 0) {
             const ds = data.dealer.summary;
             all.push(`🏢 共 ${ds.total_dealers} 家经销商，CR${ds.cr_n} 集中度 ${ds.cr_rate}%`);
         }
