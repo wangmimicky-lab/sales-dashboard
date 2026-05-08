@@ -927,8 +927,19 @@
     function analyzeDealer(data) {
         if (!data.length || !('customer_name' in data[0]) || !('sales_amount' in data[0])) return null;
 
+        // 按 [日期, 订单号] 去重，避免同一订单被重复计算
+        const seen = new Set();
+        const dedupedData = data.filter(r => {
+            const dateVal = r.order_date instanceof Date ? r.order_date.toISOString().slice(0, 10) : String(r.order_date ?? '');
+            const idVal = String(r.order_id ?? '');
+            const key = `${dateVal}|${idVal}`;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        });
+
         const groups = {};
-        for (const r of data) {
+        for (const r of dedupedData) {
             const name = r.customer_name ?? '未知';
             if (!groups[name]) groups[name] = { sales: 0, orders: new Set() };
             groups[name].sales += parseFloat(r.sales_amount) || 0;
@@ -1005,8 +1016,19 @@
     function analyzeRegion(data) {
         if (!data.length || !('region' in data[0]) || !('sales_amount' in data[0])) return null;
 
+        // 按 [日期, 订单号] 去重
+        const seen = new Set();
+        const dedupedData = data.filter(r => {
+            const dateVal = r.order_date instanceof Date ? r.order_date.toISOString().slice(0, 10) : String(r.order_date ?? '');
+            const idVal = String(r.order_id ?? '');
+            const key = `${dateVal}|${idVal}`;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        });
+
         const groups = {};
-        for (const r of data) {
+        for (const r of dedupedData) {
             const name = r.region ?? '未知';
             if (!groups[name]) groups[name] = { sales: 0, orders: new Set(), dealers: new Set() };
             groups[name].sales += parseFloat(r.sales_amount) || 0;
@@ -1035,10 +1057,21 @@
         if (!data.length) return null;
         const result = {};
 
+        // 按 [日期, 订单号] 去重
+        const seen = new Set();
+        const dedupedData = data.filter(r => {
+            const dateVal = r.order_date instanceof Date ? r.order_date.toISOString().slice(0, 10) : String(r.order_date ?? '');
+            const idVal = String(r.order_id ?? '');
+            const key = `${dateVal}|${idVal}`;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        });
+
         // 品类分析
         if ('product_category' in data[0]) {
             const groups = {};
-            for (const r of data) {
+            for (const r of dedupedData) {
                 const name = r.product_category ?? '未知';
                 if (!groups[name]) groups[name] = { sales: 0, qty: 0, orders: new Set() };
                 groups[name].sales += parseFloat(r.sales_amount) || 0;
