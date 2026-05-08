@@ -74,6 +74,37 @@
         .status-text { font-size: 14px; }
         .status-text small { color: #6B7280; display: block; margin-top: 2px; }
 
+        /* ─── 字段配置面板 ─────────────────────────────────────── */
+        .config-panel {
+            display: none; background: #FFFFFF; border-radius: 10px;
+            padding: 20px; margin-bottom: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+        }
+        .config-panel.show { display: block; }
+        .config-title { font-size: 15px; font-weight: 600; margin-bottom: 16px; color: #1A1D21; }
+        .config-grid {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px;
+        }
+        .config-item {
+            padding: 14px; background: #F5F7FA; border-radius: 8px;
+        }
+        .config-item-label { font-size: 13px; font-weight: 600; color: #1A1D21; margin-bottom: 8px; }
+        .config-item-hint { font-size: 12px; color: #9CA3AF; margin-top: 6px; }
+        .config-select {
+            width: 100%; padding: 8px 10px; border: 1px solid #E8ECF0; border-radius: 6px;
+            font-size: 13px; color: #1A1D21; background: #FFF; outline: none; cursor: pointer;
+        }
+        .config-select:focus { border-color: #3B82F6; }
+        .config-actions { margin-top: 18px; display: flex; gap: 10px; justify-content: flex-end; }
+        .config-btn {
+            padding: 8px 16px; border-radius: 6px; font-size: 13px; cursor: pointer;
+            transition: all 0.2s; border: 1px solid #E8ECF0;
+        }
+        .config-btn-primary { background: #3B82F6; color: #FFF; border-color: #3B82F6; }
+        .config-btn-primary:hover { background: #2563EB; }
+        .config-btn-secondary { background: #F5F7FA; color: #6B7280; }
+        .config-btn-secondary:hover { background: #E8ECF0; }
+
         /* ─── 数据质量面板 ─────────────────────────────────────── */
         .quality-panel {
             display: none; background: #FFFFFF; border-radius: 10px;
@@ -293,6 +324,45 @@
         }
         .insight-item:last-child { border-bottom: none; }
 
+        /* ─── 数据预览 ─────────────────────────────────────── */
+        .data-preview {
+            display: none; background: #FFFFFF; border-radius: 10px;
+            padding: 20px; margin-bottom: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+        }
+        .data-preview.show { display: block; }
+        .preview-title { font-size: 14px; font-weight: 600; margin-bottom: 12px; }
+        .preview-table {
+            width: 100%; border-collapse: collapse; font-size: 12px;
+            max-height: 300px; overflow-y: auto; display: block;
+        }
+        .preview-table th {
+            position: sticky; top: 0; background: #F5F7FA; padding: 8px 10px;
+            text-align: left; border-bottom: 2px solid #E8ECF0; font-weight: 600;
+        }
+        .preview-table td {
+            padding: 6px 10px; border-bottom: 1px solid #F0F2F5;
+        }
+        .preview-table tr:hover { background: #FAFBFC; }
+
+        /* ─── 处理日志 ─────────────────────────────────────── */
+        .processing-log {
+            display: none; background: #FFFFFF; border-radius: 10px;
+            padding: 20px; margin-bottom: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+        }
+        .processing-log.show { display: block; }
+        .log-title { font-size: 14px; font-weight: 600; margin-bottom: 12px; }
+        .log-content {
+            background: #F5F7FA; border-radius: 6px; padding: 12px;
+            font-size: 12px; color: #374151; line-height: 1.8;
+            max-height: 200px; overflow-y: auto;
+        }
+        .log-item { padding: 2px 0; }
+        .log-item.error { color: #EF4444; }
+        .log-item.warn { color: #F59E0B; }
+        .log-item.success { color: #10B981; }
+
         /* ─── 响应式 ─────────────────────────────────────── */
         @media (max-width: 1024px) {
             .kpi-row { grid-template-columns: repeat(3, 1fr); }
@@ -308,6 +378,7 @@
             .granularity-group { margin-left: 0; margin-top: 8px; }
             .quality-grid { grid-template-columns: 1fr 1fr; }
             .dashboard-controls { flex-direction: column; }
+            .config-grid { grid-template-columns: 1fr; }
         }
     </style>
 </head>
@@ -344,10 +415,34 @@
             </div>
         </div>
 
+        <!-- 字段配置面板 -->
+        <div class="config-panel" id="configPanel">
+            <div class="config-title">🔧 字段配置 - 请指定各字段对应的列</div>
+            <div class="config-grid" id="configGrid"></div>
+            <div class="config-actions">
+                <button class="config-btn config-btn-secondary" onclick="skipConfig()">跳过（使用自动识别）</button>
+                <button class="config-btn config-btn-primary" onclick="confirmConfig()">确认并生成图表</button>
+            </div>
+        </div>
+
         <!-- 数据质量面板 -->
         <div class="quality-panel" id="qualityPanel">
             <div class="quality-title">📋 数据质量报告</div>
             <div class="quality-grid" id="qualityGrid"></div>
+        </div>
+
+        <!-- 处理日志 -->
+        <div class="processing-log" id="processingLog">
+            <div class="log-title">📝 处理日志</div>
+            <div class="log-content" id="logContent"></div>
+        </div>
+
+        <!-- 原始数据预览 -->
+        <div class="data-preview" id="dataPreview">
+            <div class="preview-title">📊 原始数据预览（前 20 行）</div>
+            <div style="overflow-x: auto;">
+                <table class="preview-table" id="previewTable"></table>
+            </div>
         </div>
 
         <!-- 筛选器 -->
@@ -379,52 +474,7 @@
 
         <!-- ═══ 第二层：图表分析 ═══ -->
         <div class="layer-title" id="layerChartTitle" style="display:none">📈 数据分析</div>
-        <div class="charts-grid" id="chartsGrid">
-            <div class="chart-card full">
-                <div class="chart-header">
-                    <span class="chart-title">📈 销售趋势与节奏</span>
-                    <button class="chart-export-btn" onclick="exportChart('trend')">导出 ↓</button>
-                </div>
-                <div id="chartTrend" class="chart-container tall"></div>
-                <div class="chart-metric" id="metricTrend"></div>
-            </div>
-
-            <div class="chart-card">
-                <div class="chart-header">
-                    <span class="chart-title">📊 经销商贡献与集中度</span>
-                    <button class="chart-export-btn" onclick="exportChart('dealer')">导出 ↓</button>
-                </div>
-                <div id="chartDealer" class="chart-container"></div>
-                <div class="chart-metric" id="metricDealer"></div>
-            </div>
-
-            <div class="chart-card">
-                <div class="chart-header">
-                    <span class="chart-title">🗺️ 区域销售分布</span>
-                    <button class="chart-export-btn" onclick="exportChart('region')">导出 ↓</button>
-                </div>
-                <div id="chartRegion" class="chart-container"></div>
-                <div class="chart-metric" id="metricRegion"></div>
-            </div>
-
-            <div class="chart-card">
-                <div class="chart-header">
-                    <span class="chart-title">🥧 产品/品类表现</span>
-                    <button class="chart-export-btn" onclick="exportChart('product')">导出 ↓</button>
-                </div>
-                <div id="chartProduct" class="chart-container"></div>
-                <div class="chart-metric" id="metricProduct"></div>
-            </div>
-
-            <div class="chart-card">
-                <div class="chart-header">
-                    <span class="chart-title">🎯 经销商活跃度</span>
-                    <button class="chart-export-btn" onclick="exportChart('activity')">导出 ↓</button>
-                </div>
-                <div id="chartActivity" class="chart-container"></div>
-                <div class="chart-metric" id="metricActivity"></div>
-            </div>
-        </div>
+        <div class="charts-grid" id="chartsGrid"></div>
 
         <!-- ═══ 自定义看板 ═══ -->
         <div class="layer-title" id="layerCustomTitle" style="display:none">🛠️ 自定义看板</div>
@@ -447,19 +497,21 @@
     // ═══════════════════════════════════════════════════════════
     //  全局状态
     // ═══════════════════════════════════════════════════════════
-    let rawData = [];          // 原始行 [{order_id, order_date, ...}, ...]
-    let cleanData = [];        // 清洗后数据
-    let fieldMapping = {};     // 原始列名 → 标准字段
-    let columnTypes = {};      // 列类型: 'date' | 'number' | 'text'
+    let rawData = [];
+    let cleanData = [];
+    let fieldMapping = {};
+    let columnTypes = {};
     let charts = {};
     let currentGranularity = 'auto';
     let chartsInitialized = false;
     let dashboardCounter = 0;
-    let dashboards = [];       // 自定义看板配置
+    let dashboards = [];
     let colorPalette = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#06B6D4'];
+    let processingLogs = [];
+    let userConfig = {}; // 用户配置的字段映射
 
     // ═══════════════════════════════════════════════════════════
-    //  字段映射表（从 Python config.py 移植）
+    //  字段映射表
     // ═══════════════════════════════════════════════════════════
     const FIELD_ALIASES = {
         order_id: ["订单号","订单编号","单号","交易单号","单据编号","order id","order_no","orderno","order no","order_no_","order_number","order_num","设备代码","设备编号","device_code","device_id","设备号","设备唯一码","Unique ID","unique_id","设备ID"],
@@ -474,7 +526,6 @@
         discount_rate: ["折扣","折扣率","优惠率","折扣比例","discount","discount rate","discount_rate","discount_pct","preferential_rate"],
     };
 
-    // 构建反向查找表
     const ALIAS_TO_STANDARD = {};
     for (const [standard, aliases] of Object.entries(FIELD_ALIASES)) {
         for (const alias of aliases) {
@@ -487,7 +538,6 @@
     // ═══════════════════════════════════════════════════════════
     function mapColumns(rawColumns) {
         const mapping = {};
-        const unmapped = [];
         const usedStandards = new Set();
 
         for (const col of rawColumns) {
@@ -503,48 +553,15 @@
         return mapping;
     }
 
-    // 自动识别销售额字段（当 sales_amount 未映射时）
-    function detectSalesAmountColumn(rawColumns, data) {
-        const keywords = ["金额", "销售", "实付", "营业额", "收入", "营收", "revenue", "sales", "amount", "paid", "income"];
-        const numericCols = [];
-
-        for (const col of rawColumns) {
-            const lower = col.toLowerCase();
-            // 检查是否包含关键词
-            const hasKeyword = keywords.some(kw => lower.includes(kw.toLowerCase()));
-            if (!hasKeyword) continue;
-
-            // 检查是否为数值列
-            let numCount = 0;
-            const sample = data.slice(0, Math.min(20, data.length));
-            for (const r of sample) {
-                const val = String(r[col] ?? '').trim();
-                if (val && !isNaN(parseFloat(val.replace(/[¥$€,]/g, '')))) numCount++;
-            }
-            if (numCount / sample.length > 0.7) {
-                numericCols.push(col);
-            }
-        }
-
-        // 优先返回包含"销售额"或"销售金额"的列
-        for (const col of numericCols) {
-            if (col.includes("销售额") || col.includes("销售金额") || col.includes("sales amount")) return col;
-        }
-        return numericCols[0] || null;
-    }
-
     function matchAlias(col) {
         const key = col.toLowerCase().trim();
-        // 精确匹配
         if (ALIAS_TO_STANDARD[key]) return ALIAS_TO_STANDARD[key];
 
-        // 清理后匹配
         const cleaned = key.replace(/[\s_\-\.\(\)\//]/g, '');
         for (const [alias, standard] of Object.entries(ALIAS_TO_STANDARD)) {
             if (cleaned === alias.replace(/[\s_\-\.\(\)\//]/g, '')) return standard;
         }
 
-        // 包含匹配
         for (const [alias, standard] of Object.entries(ALIAS_TO_STANDARD)) {
             const aliasLower = alias.toLowerCase();
             if (aliasLower.includes(key) && key.length >= 2) return standard;
@@ -566,7 +583,6 @@
             for (const [raw, standard] of Object.entries(mapping)) {
                 if (row[raw] !== undefined) newRow[standard] = row[raw];
             }
-            // 保留未映射的列
             for (const key of Object.keys(row)) {
                 if (!mapping[key]) newRow[key] = row[key];
             }
@@ -576,11 +592,12 @@
         // 2. 去除空行
         const idCol = mapping['订单号'] || mapping['order_id'] || Object.keys(mapping).length > 0 ? Object.values(mapping)[0] : null;
         let filtered = idCol ? renamed.filter(r => r[idCol] != null && String(r[idCol]).trim() !== '') : renamed;
-        if (filtered.length < initialRows) log.push(`去除空行: ${initialRows - filtered.length} 行`);
+        if (filtered.length < initialRows) {
+            log.push({ type: 'warn', text: `去除空行: ${initialRows - filtered.length} 行` });
+        }
         initialRows = filtered.length;
 
-        // 3. 去重（基于 [日期, 设备唯一码] 双字段组合）
-        // 注意：同一设备在不同日期出现是正常的，不能仅基于设备码去重
+        // 3. 去重
         const dateColForDedup = 'order_date';
         const idColForDedup = 'order_id';
         const hasBothCols = dateColForDedup in (filtered[0] || {}) && idColForDedup in (filtered[0] || {});
@@ -595,10 +612,11 @@
                 seen.add(key);
                 return true;
             });
-            if (filtered.length < before) log.push(`去重: 移除 ${before - filtered.length} 条重复记录（基于日期+设备组合）`);
+            if (filtered.length < before) {
+                log.push({ type: 'warn', text: `去重: 移除 ${before - filtered.length} 条重复记录（基于日期+设备组合）` });
+            }
         } else if (idColForDedup in (filtered[0] || {})) {
-            // 只有设备码没有日期时，不做去重（避免误删）
-            log.push('去重: 无日期字段，跳过去重');
+            log.push({ type: 'warn', text: '去重: 无日期字段，跳过去重' });
         }
 
         // 4. 日期标准化
@@ -607,17 +625,10 @@
             filtered = filtered.map(r => {
                 if (r.order_date == null) return r;
                 let d = String(r.order_date).trim();
-                // 替换年月日为分隔符
-                d = d.replace(/[年月]/g, '-').replace(/日$/g, '');
-                // 合并连续横杠
-                d = d.replace(/-{2,}/g, '-');
-                // 去掉斜杠和空格
-                d = d.replace(/[/\s]+/g, '');
-                // YYYYMMDD → YYYY-MM-DD
+                d = d.replace(/[年月]/g, '-').replace(/日$/g, '').replace(/-{2,}/g, '-').replace(/[/\s]+/g, '');
                 if (/^\d{8}$/.test(d)) {
                     d = d.slice(0,4) + '-' + d.slice(4,6) + '-' + d.slice(6,8);
                 }
-                // 尝试解析
                 const parsed = new Date(d);
                 if (isNaN(parsed.getTime())) {
                     dateErrors++;
@@ -625,8 +636,11 @@
                 }
                 return { ...r, order_date: parsed };
             });
-            if (dateErrors > 0) log.push(`日期转换: ${dateErrors} 条无法解析`);
-            else log.push('日期转换: 全部成功');
+            if (dateErrors > 0) {
+                log.push({ type: 'error', text: `日期转换: ${dateErrors} 条无法解析` });
+            } else {
+                log.push({ type: 'success', text: '日期转换: 全部成功' });
+            }
         }
 
         // 5. 数值列清理
@@ -646,7 +660,9 @@
             });
             cleanedCount++;
         }
-        if (cleanedCount > 0) log.push(`数值清理: ${cleanedCount} 个数值列已标准化`);
+        if (cleanedCount > 0) {
+            log.push({ type: 'success', text: `数值清理: ${cleanedCount} 个数值列已标准化` });
+        }
 
         // 6. 空值处理
         const nullSummary = {};
@@ -664,7 +680,7 @@
             }));
         }
         if (Object.keys(nullSummary).length > 0) {
-            log.push(`空值处理: ${Object.entries(nullSummary).map(([k,v]) => `${k}: ${v}`).join(', ')}`);
+            log.push({ type: 'warn', text: `空值处理: ${Object.entries(nullSummary).map(([k,v]) => `${k}: ${v}`).join(', ')}` });
         }
 
         const finalRows = filtered.length;
@@ -676,32 +692,6 @@
         };
 
         return { data: filtered, log, stats };
-    }
-
-    // 过滤掉 100% 缺失的列（合作方、备注等全空字段）
-    function cleanRawDataFilterMissing(data) {
-        if (data.length === 0) return data;
-        const cols = Object.keys(data[0]);
-        const missingCols = new Set();
-        for (const col of cols) {
-            let allMissing = true;
-            for (const r of data) {
-                const val = r[col];
-                if (val != null && val !== '' && val !== '未知' && val !== 0) {
-                    allMissing = false;
-                    break;
-                }
-            }
-            if (allMissing) missingCols.add(col);
-        }
-        if (missingCols.size === 0) return data;
-        return data.map(r => {
-            const newRow = {};
-            for (const [k, v] of Object.entries(r)) {
-                if (!missingCols.has(k)) newRow[k] = v;
-            }
-            return newRow;
-        });
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -723,30 +713,197 @@
         return types;
     }
 
-    // 自动检测日期列（当 order_date 未映射时）
-    function detectDateColumn(data) {
-        if (data.length === 0) return null;
-        const cols = Object.keys(data[0]);
-        for (const col of cols) {
-            // 跳过已经是标准字段的
-            if (col === 'order_date') continue;
-            let dateCount = 0;
-            const sample = data.slice(0, Math.min(30, data.length));
-            for (const r of sample) {
-                const val = String(r[col] ?? '').trim();
-                if (!val) continue;
-                // 尝试解析
-                let d = val.replace(/[年月]/g, '-').replace(/日$/g, '').replace(/-{2,}/g, '-').replace(/[/\s]+/g, '');
-                if (/^\d{8}$/.test(d)) d = d.slice(0,4) + '-' + d.slice(4,6) + '-' + d.slice(6,8);
-                if (!isNaN(new Date(d).getTime())) dateCount++;
-            }
-            if (dateCount / sample.length > 0.7) return col;
+    // ═══════════════════════════════════════════════════════════
+    //  字段配置面板
+    // ═══════════════════════════════════════════════════════════
+    const CONFIG_FIELDS = [
+        { key: 'order_date', label: '时间字段', hint: '用于趋势分析和时间筛选', type: 'date' },
+        { key: 'sales_amount', label: '销售额字段', hint: '用于所有金额计算和图表', type: 'number' },
+        { key: 'order_id', label: '设备唯一码/订单号', hint: '用于去重和统计', type: 'text' },
+        { key: 'customer_name', label: '经销商/客户', hint: '用于经销商分析', type: 'text' },
+        { key: 'region', label: '区域', hint: '用于区域分析', type: 'text' },
+        { key: 'product_name', label: '产品名称', hint: '用于产品分析', type: 'text' },
+        { key: 'product_category', label: '产品品类', hint: '用于品类分析', type: 'text' },
+        { key: 'quantity', label: '数量字段', hint: '用于销量统计', type: 'number' },
+    ];
+
+    function showConfigPanel(columns, rawRows) {
+        const grid = document.getElementById('configGrid');
+        let html = '';
+
+        for (const field of CONFIG_FIELDS) {
+            const options = columns.map(c => `<option value="${c}">${c}</option>`).join('');
+            html += `
+                <div class="config-item">
+                    <div class="config-item-label">${field.label}</div>
+                    <select class="config-select" id="config-${field.key}">
+                        <option value="">-- 不选择 --</option>
+                        ${options}
+                    </select>
+                    <div class="config-item-hint">${field.hint}</div>
+                </div>
+            `;
         }
-        return null;
+
+        grid.innerHTML = html;
+        document.getElementById('configPanel').classList.add('show');
+    }
+
+    function confirmConfig() {
+        // 获取用户配置
+        userConfig = {};
+        for (const field of CONFIG_FIELDS) {
+            const select = document.getElementById(`config-${field.key}`);
+            if (select && select.value) {
+                userConfig[field.key] = select.value;
+            }
+        }
+
+        // 合并用户配置和自动映射
+        fieldMapping = {};
+        const rawColumns = Object.keys(rawData[0] || {});
+        const autoMapping = mapColumns(rawColumns);
+
+        // 用户配置优先
+        for (const [key, col] of Object.entries(userConfig)) {
+            fieldMapping[col] = key;
+        }
+
+        // 自动映射补充
+        const usedColumns = new Set(Object.keys(fieldMapping));
+        for (const [col, standard] of Object.entries(autoMapping)) {
+            if (!usedColumns.has(col)) {
+                fieldMapping[col] = standard;
+            }
+        }
+
+        document.getElementById('configPanel').classList.remove('show');
+        processData();
+    }
+
+    function skipConfig() {
+        document.getElementById('configPanel').classList.remove('show');
+        processData();
     }
 
     // ═══════════════════════════════════════════════════════════
-    //  聚合引擎（JS 版 group_by + sum/avg/count）
+    //  数据处理
+    // ═══════════════════════════════════════════════════════════
+    function processData() {
+        const columns = Object.keys(rawData[0] || {});
+
+        // 数据清洗
+        const cleanResult = cleanRawData(rawData, fieldMapping);
+        cleanData = cleanResult.data;
+        columnTypes = detectColumnTypes(cleanData);
+        processingLogs = cleanResult.log;
+
+        // 显示状态
+        showStatus('✅', `已加载 ${cleanResult.stats.final_rows} 行数据`,
+            `匹配 ${Object.keys(fieldMapping).length} 个字段 | 清洗移除 ${cleanResult.stats.removed_rows} 行`);
+
+        // 数据质量面板
+        renderQualityPanel(cleanResult, columns.filter(c => c.trim()).length, Object.keys(fieldMapping).length);
+
+        // 处理日志
+        renderProcessingLog();
+
+        // 原始数据预览
+        renderDataPreview();
+
+        // 显示筛选器
+        document.getElementById('filters').classList.add('show');
+        document.getElementById('qualityPanel').classList.add('show');
+
+        // 加载筛选器选项
+        loadFilterOptions();
+
+        // 执行分析
+        runAnalysis();
+
+        // 重置自定义看板
+        resetDashboards();
+        document.getElementById('addDashboardBtn').classList.add('show');
+    }
+
+    function renderQualityPanel(result, totalCols, mappedCount) {
+        const grid = document.getElementById('qualityGrid');
+        const items = [];
+        items.push({ icon: '📊', text: '原始数据', detail: `${totalCols} 列 / ${result.stats.initial_rows} 行` });
+        const unmapped = totalCols - mappedCount;
+        items.push({ icon: unmapped === 0 ? '✅' : '⚠️', text: '字段匹配', detail: `${mappedCount}/${totalCols}${unmapped > 0 ? ` (${unmapped} 未匹配)` : ''}` });
+        const removed = result.stats.removed_rows;
+        items.push({ icon: removed > 0 ? '🔄' : '✅', text: '去重处理', detail: removed > 0 ? `移除 ${removed} 条 (${result.stats.removal_rate})` : '无重复' });
+        const dateInfo = result.log.find(l => l.text.startsWith('日期'));
+        if (dateInfo) {
+            const match = dateInfo.text.match(/(\d+) 条无法解析/);
+            items.push({ icon: match ? '⚠️' : '✅', text: '日期标准化', detail: match ? `${match[1]} 条异常` : '全部成功' });
+        }
+        const nullInfo = result.log.find(l => l.text.startsWith('空值'));
+        if (nullInfo) items.push({ icon: '🔧', text: '空值处理', detail: nullInfo.text.replace('空值处理: ', '') });
+        items.push({ icon: '📋', text: '有效数据', detail: `${result.stats.final_rows} 行` });
+        grid.innerHTML = items.map(item => `
+            <div class="quality-item">
+                <span class="quality-icon">${item.icon}</span>
+                <div class="quality-text">${item.text}<span>${item.detail}</span></div>
+            </div>
+        `).join('');
+    }
+
+    function renderProcessingLog() {
+        const container = document.getElementById('logContent');
+        let html = '';
+        for (const log of processingLogs) {
+            const className = log.type === 'error' ? 'error' : log.type === 'warn' ? 'warn' : 'success';
+            html += `<div class="log-item ${className}">• ${log.text}</div>`;
+        }
+        container.innerHTML = html;
+        document.getElementById('processingLog').classList.add('show');
+    }
+
+    function renderDataPreview() {
+        const table = document.getElementById('previewTable');
+        const previewData = cleanData.slice(0, 20);
+        const columns = Object.keys(previewData[0] || {});
+
+        let html = '<thead><tr>';
+        for (const col of columns) {
+            html += `<th>${col}</th>`;
+        }
+        html += '</tr></thead><tbody>';
+
+        for (const row of previewData) {
+            html += '<tr>';
+            for (const col of columns) {
+                const val = row[col];
+                html += `<td>${val instanceof Date ? val.toISOString().slice(0, 10) : val}</td>`;
+            }
+            html += '</tr>';
+        }
+        html += '</tbody>';
+
+        table.innerHTML = html;
+        document.getElementById('dataPreview').classList.add('show');
+    }
+
+    function loadFilterOptions() {
+        const dealerSel = document.getElementById('filterDealer');
+        const regionSel = document.getElementById('filterRegion');
+        dealerSel.innerHTML = '<option value="全部">全部</option>';
+        regionSel.innerHTML = '<option value="全部">全部</option>';
+
+        if (cleanData.length && 'region' in cleanData[0]) {
+            const regions = [...new Set(cleanData.map(r => r.region).filter(Boolean))].sort();
+            regions.forEach(r => regionSel.innerHTML += `<option value="${r}">${r}</option>`);
+        }
+        if (cleanData.length && 'customer_name' in cleanData[0]) {
+            const dealers = [...new Set(cleanData.map(r => r.customer_name).filter(Boolean))].sort();
+            dealers.forEach(d => dealerSel.innerHTML += `<option value="${d}">${d}</option>`);
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    //  聚合引擎
     // ═══════════════════════════════════════════════════════════
     function groupBy(data, groupCol, valueCol, aggFn = 'sum') {
         const groups = {};
@@ -794,19 +951,13 @@
     //  分析引擎
     // ═══════════════════════════════════════════════════════════
     function analyzeTrend(data, granularity) {
-        if (!data.length) return null;
+        if (!data.length || !('order_date' in data[0]) || !('sales_amount' in data[0])) return null;
 
-        // 确定日期列和金额列
-        const dateCol = ('order_date' in data[0]) ? 'order_date' : detectDateColumn(data);
-        const salesCol = ('sales_amount' in data[0]) ? 'sales_amount' : null;
-        if (!dateCol || !salesCol) return null;
-
-        // 自动推荐粒度
         if (granularity === 'auto') {
-            const validDates = data.filter(r => r[dateCol] instanceof Date).map(r => r[dateCol]);
-            if (validDates.length > 0) {
-                const min = new Date(Math.min(...validDates.map(d => d.getTime())));
-                const max = new Date(Math.max(...validDates.map(d => d.getTime())));
+            const dates = data.filter(r => r.order_date instanceof Date).map(r => r.order_date);
+            if (dates.length > 0) {
+                const min = new Date(Math.min(...dates.map(d => d.getTime())));
+                const max = new Date(Math.max(...dates.map(d => d.getTime())));
                 const spanDays = (max - min) / (1000 * 60 * 60 * 24);
                 if (spanDays > 180) granularity = 'month';
                 else if (spanDays > 30) granularity = 'week';
@@ -814,25 +965,23 @@
             }
         }
 
-        // 按粒度聚合
         const periodMap = {};
         for (const r of data) {
-            const dateVal = r[dateCol];
-            if (!(dateVal instanceof Date)) continue;
+            if (!(r.order_date instanceof Date)) continue;
             let periodKey;
             if (granularity === 'week') {
-                const d = new Date(dateVal);
+                const d = new Date(r.order_date);
                 const dayOfWeek = d.getDay();
                 const diff = d.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
                 const monday = new Date(d.setDate(diff));
                 periodKey = monday.toISOString().slice(0, 10);
             } else if (granularity === 'month') {
-                periodKey = dateVal.toISOString().slice(0, 7);
+                periodKey = r.order_date.toISOString().slice(0, 7);
             } else {
-                periodKey = dateVal.toISOString().slice(0, 10);
+                periodKey = r.order_date.toISOString().slice(0, 10);
             }
             if (!periodMap[periodKey]) periodMap[periodKey] = { sales: 0, count: 0 };
-            periodMap[periodKey].sales += parseFloat(salesCol ? r[salesCol] : 0) || 0;
+            periodMap[periodKey].sales += parseFloat(r.sales_amount) || 0;
             periodMap[periodKey].count++;
         }
 
@@ -840,43 +989,26 @@
         const sales = periods.map(p => Math.round(periodMap[p].sales));
         const counts = periods.map(p => periodMap[p].count);
 
-        // 环比
         const mom = sales.map((s, i) => i === 0 ? null : ((s - sales[i-1]) / Math.max(sales[i-1], 1) * 100));
 
-        // 异常波动检测：下降 >30% 或连续 3 天收入为 0
         const anomalies = [];
         let zeroStreak = 0;
 
         periods.forEach((p, i) => {
-            // 下降超过 30%
             if (mom[i] != null && mom[i] < -30) {
-                const region = detectRegionForPeriod(data, dateCol, p, periodMap);
                 anomalies.push({
-                    date: p,
-                    sales: sales[i],
-                    rate: Math.round(mom[i] * 10) / 10,
-                    direction: 'down',
-                    region: region || '',
-                    reason: '下降超30%'
+                    date: p, sales: sales[i], rate: Math.round(mom[i] * 10) / 10,
+                    direction: 'down', region: '', reason: '下降超30%'
                 });
             }
 
-            // 连续零收入
             if (sales[i] === 0) {
                 zeroStreak++;
                 if (zeroStreak >= 3) {
-                    const region = detectRegionForPeriod(data, dateCol, p, periodMap);
-                    // 只在第3天及之后添加一次
-                    if (!anomalies.some(a => a.reason === '连续3天零收入' && a.date === p)) {
-                        anomalies.push({
-                            date: p,
-                            sales: 0,
-                            rate: -100,
-                            direction: 'down',
-                            region: region || '',
-                            reason: '连续3天零收入'
-                        });
-                    }
+                    anomalies.push({
+                        date: p, sales: 0, rate: -100, direction: 'down',
+                        region: '', reason: '连续3天零收入'
+                    });
                 }
             } else {
                 zeroStreak = 0;
@@ -886,8 +1018,6 @@
         const totalSales = sales.reduce((a, b) => a + b, 0);
         const totalRecords = counts.reduce((a, b) => a + b, 0);
         const latestMom = mom.filter(m => m !== null).pop() || 0;
-
-        // 计算天数（用于日均）
         const days = periods.length || 1;
 
         return {
@@ -905,29 +1035,9 @@
         };
     }
 
-    // 检测某周期数据所属区域
-    function detectRegionForPeriod(data, dateCol, periodKey, periodMap) {
-        if (!('region' in data[0])) return '';
-        // 匹配该周期的数据
-        const periodDates = new Set();
-        for (const r of data) {
-            if (!(r[dateCol] instanceof Date)) continue;
-            let pk;
-            if (periodKey.length === 7) { // month
-                pk = r[dateCol].toISOString().slice(0, 7);
-            } else {
-                pk = r[dateCol].toISOString().slice(0, 10);
-            }
-            if (pk === periodKey) periodDates.add(r.region);
-        }
-        const regions = [...periodDates].filter(Boolean);
-        return regions.length > 0 ? regions.slice(0, 3).join(', ') : '';
-    }
-
     function analyzeDealer(data) {
         if (!data.length || !('customer_name' in data[0]) || !('sales_amount' in data[0])) return null;
 
-        // 按 [日期, 订单号] 去重，避免同一订单被重复计算
         const seen = new Set();
         const dedupedData = data.filter(r => {
             const dateVal = r.order_date instanceof Date ? r.order_date.toISOString().slice(0, 10) : String(r.order_date ?? '');
@@ -953,7 +1063,6 @@
         const totalSales = dealers.reduce((a, d) => a + d.sales, 0);
         const totalDealers = dealers.length;
 
-        // 累计占比
         let cumSum = 0;
         dealers.forEach(d => {
             cumSum += d.sales;
@@ -961,12 +1070,10 @@
             d.pct = Math.round(d.sales / Math.max(totalSales, 1) * 1000) / 10;
         });
 
-        // CR10
         const crN = 10;
         const crSales = dealers.slice(0, crN).reduce((a, d) => a + d.sales, 0);
         const crRate = Math.round(crSales / Math.max(totalSales, 1) * 1000) / 10;
 
-        // 帕累托分层
         const headCount = Math.max(1, Math.floor(totalDealers * 0.2));
         dealers.forEach((d, i) => {
             if (i < headCount) d.tier = '头部';
@@ -974,7 +1081,6 @@
             else d.tier = '尾部';
         });
 
-        // 静默客户（基于最后订单日期）
         let silentShort = 0, silentLong = 0;
         if ('order_date' in data[0]) {
             const maxDate = Math.max(...data.filter(r => r.order_date instanceof Date).map(r => r.order_date.getTime()));
@@ -1016,7 +1122,6 @@
     function analyzeRegion(data) {
         if (!data.length || !('region' in data[0]) || !('sales_amount' in data[0])) return null;
 
-        // 按 [日期, 订单号] 去重
         const seen = new Set();
         const dedupedData = data.filter(r => {
             const dateVal = r.order_date instanceof Date ? r.order_date.toISOString().slice(0, 10) : String(r.order_date ?? '');
@@ -1057,7 +1162,6 @@
         if (!data.length) return null;
         const result = {};
 
-        // 按 [日期, 订单号] 去重
         const seen = new Set();
         const dedupedData = data.filter(r => {
             const dateVal = r.order_date instanceof Date ? r.order_date.toISOString().slice(0, 10) : String(r.order_date ?? '');
@@ -1068,7 +1172,6 @@
             return true;
         });
 
-        // 品类分析
         if ('product_category' in data[0]) {
             const groups = {};
             for (const r of dedupedData) {
@@ -1181,7 +1284,8 @@
                 header: true,
                 skipEmptyLines: true,
                 complete: function(results) {
-                    processRawData(results.data, results.meta.fields);
+                    rawData = results.data;
+                    processFile(results.data, results.meta.fields);
                 },
                 error: function(err) {
                     showStatus('❌', 'CSV 解析失败', err.message);
@@ -1198,7 +1302,8 @@
                         showStatus('❌', '文件为空', '没有找到数据行');
                         return;
                     }
-                    processRawData(data, Object.keys(data[0]));
+                    rawData = data;
+                    processFile(data, Object.keys(data[0]));
                 } catch (err) {
                     showStatus('❌', 'Excel 解析失败', err.message);
                 }
@@ -1209,95 +1314,15 @@
         }
     }
 
-    function processRawData(rows, columns) {
+    function processFile(rows, columns) {
         showStatus('⏳', `正在清洗数据...`, `${columns.length} 列，${rows.length} 行`);
 
         // 字段映射
         fieldMapping = mapColumns(columns);
         const mappedCount = Object.keys(fieldMapping).length;
-        const totalCols = columns.filter(c => c.trim()).length;
 
-        // 自动识别销售额字段（当 sales_amount 未映射时）
-        let autoDetectedSalesCol = null;
-        if (!('sales_amount' in fieldMapping)) {
-            autoDetectedSalesCol = detectSalesAmountColumn(columns, rows);
-            if (autoDetectedSalesCol) {
-                fieldMapping[autoDetectedSalesCol] = 'sales_amount';
-            }
-        }
-
-        // 数据清洗
-        const cleanResult = cleanRawData(rows, fieldMapping);
-        cleanData = cleanRawDataFilterMissing(cleanResult.data);
-        columnTypes = detectColumnTypes(cleanData);
-
-        // 显示状态 - 包含识别到的字段信息
-        let detail = `匹配 ${mappedCount} 个字段 | 清洗移除 ${cleanResult.stats.removed_rows} 行`;
-        if (autoDetectedSalesCol) {
-            detail += ` | 已识别销售额字段：[${autoDetectedSalesCol}]`;
-        }
-        showStatus('✅', `已加载 ${cleanResult.stats.final_rows} 行数据`, detail);
-
-        // 数据质量面板
-        renderQualityPanel(cleanResult, totalCols, mappedCount, autoDetectedSalesCol);
-
-        // 显示筛选器
-        document.getElementById('filters').classList.add('show');
-        document.getElementById('qualityPanel').classList.add('show');
-
-        // 加载筛选器选项
-        loadFilterOptions();
-
-        // 执行分析
-        runAnalysis();
-
-        // 重置自定义看板
-        resetDashboards();
-        // 上传新文件后显示"添加看板"按钮
-        document.getElementById('addDashboardBtn').classList.add('show');
-    }
-
-    function renderQualityPanel(result, totalCols, mappedCount, autoDetectedSalesCol) {
-        const grid = document.getElementById('qualityGrid');
-        const items = [];
-        items.push({ icon: '📊', text: '原始数据', detail: `${totalCols} 列 / ${result.stats.initial_rows} 行` });
-        const unmapped = totalCols - mappedCount;
-        items.push({ icon: unmapped === 0 ? '✅' : '⚠️', text: '字段匹配', detail: `${mappedCount}/${totalCols}${unmapped > 0 ? ` (${unmapped} 未匹配)` : ''}` });
-        const removed = result.stats.removed_rows;
-        items.push({ icon: removed > 0 ? '🔄' : '✅', text: '去重处理', detail: removed > 0 ? `移除 ${removed} 条 (${result.stats.removal_rate})` : '无重复' });
-        const dateInfo = result.log.find(l => l.startsWith('日期'));
-        if (dateInfo) {
-            const match = dateInfo.match(/(\d+) 条无法解析/);
-            items.push({ icon: match ? '⚠️' : '✅', text: '日期标准化', detail: match ? `${match[1]} 条异常` : '全部成功' });
-        }
-        const nullInfo = result.log.find(l => l.startsWith('空值'));
-        if (nullInfo) items.push({ icon: '🔧', text: '空值处理', detail: nullInfo.replace('空值处理: ', '') });
-        items.push({ icon: '📋', text: '有效数据', detail: `${result.stats.final_rows} 行` });
-        if (autoDetectedSalesCol) {
-            items.push({ icon: '💰', text: '销售额字段', detail: `[${autoDetectedSalesCol}]` });
-        }
-        grid.innerHTML = items.map(item => `
-            <div class="quality-item">
-                <span class="quality-icon">${item.icon}</span>
-                <div class="quality-text">${item.text}<span>${item.detail}</span></div>
-            </div>
-        `).join('');
-    }
-
-    function loadFilterOptions() {
-        const dealerSel = document.getElementById('filterDealer');
-        const regionSel = document.getElementById('filterRegion');
-        dealerSel.innerHTML = '<option value="全部">全部</option>';
-        regionSel.innerHTML = '<option value="全部">全部</option>';
-
-        if (cleanData.length && 'region' in cleanData[0]) {
-            const regions = [...new Set(cleanData.map(r => r.region).filter(Boolean))].sort();
-            regions.forEach(r => regionSel.innerHTML += `<option value="${r}">${r}</option>`);
-        }
-        if (cleanData.length && 'customer_name' in cleanData[0]) {
-            const dealers = [...new Set(cleanData.map(r => r.customer_name).filter(Boolean))].sort();
-            dealers.forEach(d => dealerSel.innerHTML += `<option value="${d}">${d}</option>`);
-        }
+        // 显示配置面板
+        showConfigPanel(columns, rows);
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -1323,7 +1348,7 @@
         const activityAnalysis = analyzeActivity(filtered);
 
         const analysisData = {
-            summary: { total_sales: trend?.summary?.total_sales || 0, total_orders: trend?.summary?.total_orders || 0 },
+            summary: { total_sales: trend?.summary?.total_sales || 0, total_orders: trend?.summary?.total_records || 0 },
             trend, dealer: dealerAnalysis, region: regionAnalysis, product: productAnalysis, activity: activityAnalysis,
         };
 
@@ -1354,20 +1379,70 @@
         renderAlerts(data);
         renderInsights(data);
 
+        // 动态生成图表
         requestAnimationFrame(() => {
             initCharts();
-            renderCharts(data);
+            renderDynamicCharts(data);
         });
     }
 
     function initCharts() {
         if (chartsInitialized) return;
-        ['chartTrend', 'chartDealer', 'chartRegion', 'chartProduct', 'chartActivity'].forEach(id => {
-            if (document.getElementById(id)) {
-                charts[id] = echarts.init(document.getElementById(id), null, { renderer: 'canvas' });
-            }
-        });
         chartsInitialized = true;
+    }
+
+    function renderDynamicCharts(data) {
+        const grid = document.getElementById('chartsGrid');
+        grid.innerHTML = '';
+
+        // 趋势图（时间 + 数值）
+        if (data.trend?.chart) {
+            const card = createChartCard('趋势图', 'chartTrend', true);
+            grid.appendChild(card);
+            renderTrendChart(data.trend);
+        }
+
+        // 经销商帕累托（类别 + 数值）
+        if (data.dealer?.chart) {
+            const card = createChartCard('经销商贡献', 'chartDealer');
+            grid.appendChild(card);
+            renderDealerChart(data.dealer);
+        }
+
+        // 区域分布（类别 + 数值）
+        if (data.region?.chart) {
+            const card = createChartCard('区域销售分布', 'chartRegion');
+            grid.appendChild(card);
+            renderRegionChart(data.region);
+        }
+
+        // 品类饼图（类别 + 数值）
+        if (data.product?.category) {
+            const card = createChartCard('产品/品类表现', 'chartProduct');
+            grid.appendChild(card);
+            renderProductChart(data.product);
+        }
+
+        // 经销商活跃度（多数值）
+        if (data.activity?.chart) {
+            const card = createChartCard('经销商活跃度', 'chartActivity');
+            grid.appendChild(card);
+            renderActivityChart(data.activity);
+        }
+    }
+
+    function createChartCard(title, containerId, isFull = false) {
+        const card = document.createElement('div');
+        card.className = `chart-card${isFull ? ' full' : ''}`;
+        card.innerHTML = `
+            <div class="chart-header">
+                <span class="chart-title">${title}</span>
+                <button class="chart-export-btn" onclick="exportChart('${containerId}')">导出 ↓</button>
+            </div>
+            <div id="${containerId}" class="chart-container${isFull ? ' tall' : ''}"></div>
+            <div class="chart-metric" id="metric${containerId.replace('chart', '')}"></div>
+        `;
+        return card;
     }
 
     function renderKPI(data) {
@@ -1376,7 +1451,6 @@
         const trend = data.trend || {};
         const dealer = data.dealer || {};
 
-        // 判断是经销商模式还是设备模式
         const isDeviceMode = !dealer.summary || dealer.summary.total_dealers === 0;
         const entityLabel = isDeviceMode ? '设备' : '经销商';
         const entityCount = isDeviceMode
@@ -1408,135 +1482,164 @@
         row.classList.add('show');
     }
 
-    function renderCharts(data) {
+    function renderTrendChart(data) {
+        const t = data.chart;
+        const container = document.getElementById('chartTrend');
+        if (!container) return;
+
+        const chart = echarts.init(container, null, { renderer: 'canvas' });
+        charts.chartTrend = chart;
+
         const axisLabel = { interval: 'auto', rotate: 45, hideOverlap: true, fontSize: 12, color: '#374151' };
         const grid = { top: 40, right: 30, bottom: 80, left: 60 };
         const tooltip = { trigger: 'axis', backgroundColor: '#1A1D21', textStyle: { color: '#FFF' } };
 
-        // 趋势图
-        if (data.trend?.chart) {
-            const t = data.trend.chart;
-            charts.chartTrend.setOption({
-                grid, color: colorPalette,
-                legend: {
-                    data: ['销售额', '记录数'],
-                    right: 10, top: 2,
-                    textStyle: { fontSize: 11, color: '#374151' },
-                    selected: { '销售额': true, '记录数': true },
-                },
-                tooltip,
-                xAxis: { type: 'category', data: t.periods, axisLine: { lineStyle: { color: '#D1D5DB' } }, axisLabel, axisTick: { show: false } },
-                yAxis: [
-                    { type: 'value', name: '销售额', splitLine: { lineStyle: { color: '#F0F2F5' } }, axisLabel: { fontSize: 11, color: '#374151' }, nameTextStyle: { color: '#6B7280' }, scale: true },
-                    { type: 'value', name: '记录数', splitLine: { show: false }, axisLabel: { fontSize: 11, color: '#374151' }, nameTextStyle: { color: '#6B7280' }, scale: true }
-                ],
-                series: [
-                    { name: '销售额', type: 'line', data: t.sales, smooth: true, areaStyle: { opacity: 0.12 }, symbol: 'circle', symbolSize: 5 },
-                    { name: '记录数', type: 'bar', data: t.counts, barWidth: '30%', yAxisIndex: 1, itemStyle: { opacity: 0.35 } }
-                ],
-            });
-            charts.chartTrend.resize();
-            const summary = data.trend.summary;
-            const cls = summary.latest_mom >= 0 ? 'up' : 'down';
-            const arr = summary.latest_mom >= 0 ? '↑' : '↓';
-            document.getElementById('metricTrend').innerHTML =
-                `总销售额 <b>${summary.total_sales.toLocaleString()}</b> 元 | 记录 <b>${summary.total_records}</b> 条 | 日均 <b>${summary.daily_avg.toLocaleString()}</b> 元 | 最近一期 <span class="${cls}">${arr} ${Math.abs(summary.latest_mom)}%</span>`;
-        }
+        chart.setOption({
+            grid, color: colorPalette,
+            legend: {
+                data: ['销售额', '记录数'],
+                right: 10, top: 2,
+                textStyle: { fontSize: 11, color: '#374151' },
+                selected: { '销售额': true, '记录数': true },
+            },
+            tooltip,
+            xAxis: { type: 'category', data: t.periods, axisLine: { lineStyle: { color: '#D1D5DB' } }, axisLabel, axisTick: { show: false } },
+            yAxis: [
+                { type: 'value', name: '销售额', splitLine: { lineStyle: { color: '#F0F2F5' } }, axisLabel: { fontSize: 11, color: '#374151' }, nameTextStyle: { color: '#6B7280' }, scale: true },
+                { type: 'value', name: '记录数', splitLine: { show: false }, axisLabel: { fontSize: 11, color: '#374151' }, nameTextStyle: { color: '#6B7280' }, scale: true }
+            ],
+            series: [
+                { name: '销售额', type: 'line', data: t.sales, smooth: true, areaStyle: { opacity: 0.12 }, symbol: 'circle', symbolSize: 5 },
+                { name: '记录数', type: 'bar', data: t.counts, barWidth: '30%', yAxisIndex: 1, itemStyle: { opacity: 0.35 } }
+            ],
+        });
+        chart.resize();
 
-        // 经销商帕累托
-        if (data.dealer?.chart) {
-            const d = data.dealer.chart;
-            charts.chartDealer.setOption({
-                grid, color: colorPalette,
-                legend: { data: ['销售额', '累计占比'], right: 10, top: 2, textStyle: { fontSize: 11, color: '#374151' } },
-                tooltip,
-                xAxis: { type: 'category', data: d.names, axisLine: { lineStyle: { color: '#D1D5DB' } }, axisLabel, axisTick: { show: false } },
-                yAxis: [
-                    { type: 'value', name: '销售额', splitLine: { lineStyle: { color: '#F0F2F5' } }, axisLabel: { fontSize: 11, color: '#374151' }, nameTextStyle: { color: '#6B7280' } },
-                    { type: 'value', name: '累计%', max: 100, splitLine: { show: false }, axisLabel: { fontSize: 11, color: '#374151' }, nameTextStyle: { color: '#6B7280' } }
-                ],
-                series: [
-                    { name: '销售额', type: 'bar', data: d.sales, barWidth: '45%' },
-                    { name: '累计占比', type: 'line', data: d.cum_pct, yAxisIndex: 1, smooth: true, symbol: 'circle', symbolSize: 4 }
-                ],
-            });
-            charts.chartDealer.resize();
-            const ds = data.dealer.summary;
-            document.getElementById('metricDealer').innerHTML =
-                `CR${ds.cr_n} <b>${ds.cr_rate}%</b> | 共 <b>${ds.total_dealers}</b> 家经销商`;
-        }
+        const summary = data.summary;
+        const cls = summary.latest_mom >= 0 ? 'up' : 'down';
+        const arr = summary.latest_mom >= 0 ? '↑' : '↓';
+        document.getElementById('metricTrend').innerHTML =
+            `总销售额 <b>${summary.total_sales.toLocaleString()}</b> 元 | 记录 <b>${summary.total_records}</b> 条 | 日均 <b>${summary.daily_avg.toLocaleString()}</b> 元 | 最近一期 <span class="${cls}">${arr} ${Math.abs(summary.latest_mom)}%</span>`;
+    }
 
-        // 区域分布
-        if (data.region?.chart) {
-            const r = data.region.chart;
-            charts.chartRegion.setOption({
-                grid: { top: 20, right: 30, bottom: 30, left: 80 },
-                color: colorPalette,
-                tooltip: { trigger: 'axis', backgroundColor: '#1A1D21', textStyle: { color: '#FFF' } },
-                xAxis: { type: 'value', name: '销售额', splitLine: { lineStyle: { color: '#F0F2F5' } }, axisLabel: { fontSize: 11, color: '#374151' }, nameTextStyle: { color: '#6B7280' } },
-                yAxis: { type: 'category', data: r.names.slice().reverse(), axisLine: { lineStyle: { color: '#D1D5DB' } }, axisTick: { show: false }, axisLabel: { fontSize: 11, color: '#374151' } },
-                series: [{ type: 'bar', data: r.sales.slice().reverse(), barWidth: '50%', itemStyle: { borderRadius: [0, 4, 4, 0] } }],
-            });
-            charts.chartRegion.resize();
-            document.getElementById('metricRegion').innerHTML = `共 <b>${r.names.length}</b> 个区域`;
-        }
+    function renderDealerChart(data) {
+        const d = data.chart;
+        const container = document.getElementById('chartDealer');
+        if (!container) return;
 
-        // 品类饼图
-        if (data.product?.category) {
-            const pc = data.product.category.chart;
-            charts.chartProduct.setOption({
-                tooltip: { trigger: 'item', backgroundColor: '#1A1D21', textStyle: { color: '#FFF' } },
-                color: colorPalette,
-                series: [{
-                    type: 'pie', center: ['50%', '55%'], radius: ['35%', '65%'],
-                    avoidLabelOverlap: true,
-                    label: { show: true, formatter: '{b}\n{d}%', fontSize: 11, color: '#374151' },
-                    labelLine: { length: 12, length2: 10, lineStyle: { color: '#6B7280' } },
-                    data: pc.names.map((n, i) => ({ name: n, value: pc.pct[i] })),
-                }],
-            });
-            charts.chartProduct.resize();
-            if (data.product.category.data?.length) {
-                const top = data.product.category.data[0];
-                document.getElementById('metricProduct').innerHTML =
-                    `TOP 品类 <b>${top.name}</b> 占比 <b>${top.pct}%</b> | 共 ${data.product.category.data.length} 个品类`;
-            }
-        }
+        const chart = echarts.init(container, null, { renderer: 'canvas' });
+        charts.chartDealer = chart;
 
-        // 经销商活跃度散点图
-        if (data.activity?.chart) {
-            const a = data.activity.chart;
-            charts.chartActivity.setOption({
-                grid: { top: 20, right: 20, bottom: 50, left: 55 },
-                color: colorPalette,
-                tooltip: {
-                    backgroundColor: '#1A1D21', textStyle: { color: '#FFF' },
-                    formatter: function(params) {
+        const axisLabel = { interval: 'auto', rotate: 45, hideOverlap: true, fontSize: 12, color: '#374151' };
+        const grid = { top: 40, right: 30, bottom: 80, left: 60 };
+        const tooltip = { trigger: 'axis', backgroundColor: '#1A1D21', textStyle: { color: '#FFF' } };
+
+        chart.setOption({
+            grid, color: colorPalette,
+            legend: { data: ['销售额', '累计占比'], right: 10, top: 2, textStyle: { fontSize: 11, color: '#374151' } },
+            tooltip,
+            xAxis: { type: 'category', data: d.names, axisLine: { lineStyle: { color: '#D1D5DB' } }, axisLabel, axisTick: { show: false } },
+            yAxis: [
+                { type: 'value', name: '销售额', splitLine: { lineStyle: { color: '#F0F2F5' } }, axisLabel: { fontSize: 11, color: '#374151' }, nameTextStyle: { color: '#6B7280' } },
+                { type: 'value', name: '累计%', max: 100, splitLine: { show: false }, axisLabel: { fontSize: 11, color: '#374151' }, nameTextStyle: { color: '#6B7280' } }
+            ],
+            series: [
+                { name: '销售额', type: 'bar', data: d.sales, barWidth: '45%' },
+                { name: '累计占比', type: 'line', data: d.cum_pct, yAxisIndex: 1, smooth: true, symbol: 'circle', symbolSize: 4 }
+            ],
+        });
+        chart.resize();
+
+        const ds = data.summary;
+        document.getElementById('metricDealer').innerHTML =
+            `CR${ds.cr_n} <b>${ds.cr_rate}%</b> | 共 <b>${ds.total_dealers}</b> 家经销商`;
+    }
+
+    function renderRegionChart(data) {
+        const r = data.chart;
+        const container = document.getElementById('chartRegion');
+        if (!container) return;
+
+        const chart = echarts.init(container, null, { renderer: 'canvas' });
+        charts.chartRegion = chart;
+
+        chart.setOption({
+            grid: { top: 20, right: 30, bottom: 30, left: 80 },
+            color: colorPalette,
+            tooltip: { trigger: 'axis', backgroundColor: '#1A1D21', textStyle: { color: '#FFF' } },
+            xAxis: { type: 'value', name: '销售额', splitLine: { lineStyle: { color: '#F0F2F5' } }, axisLabel: { fontSize: 11, color: '#374151' }, nameTextStyle: { color: '#6B7280' } },
+            yAxis: { type: 'category', data: r.names.slice().reverse(), axisLine: { lineStyle: { color: '#D1D5DB' } }, axisTick: { show: false }, axisLabel: { fontSize: 11, color: '#374151' } },
+            series: [{ type: 'bar', data: r.sales.slice().reverse(), barWidth: '50%', itemStyle: { borderRadius: [0, 4, 4, 0] } }],
+        });
+        chart.resize();
+        document.getElementById('metricRegion').innerHTML = `共 <b>${r.names.length}</b> 个区域`;
+    }
+
+    function renderProductChart(data) {
+        const pc = data.category.chart;
+        const container = document.getElementById('chartProduct');
+        if (!container) return;
+
+        const chart = echarts.init(container, null, { renderer: 'canvas' });
+        charts.chartProduct = chart;
+
+        chart.setOption({
+            tooltip: { trigger: 'item', backgroundColor: '#1A1D21', textStyle: { color: '#FFF' } },
+            color: colorPalette,
+            series: [{
+                type: 'pie', center: ['50%', '55%'], radius: ['35%', '65%'],
+                avoidLabelOverlap: true,
+                label: { show: true, formatter: '{b}\n{d}%', fontSize: 11, color: '#374151' },
+                labelLine: { length: 12, length2: 10, lineStyle: { color: '#6B7280' } },
+                data: pc.names.map((n, i) => ({ name: n, value: pc.pct[i] })),
+            }],
+        });
+        chart.resize();
+        if (data.category.data?.length) {
+            const top = data.category.data[0];
+            document.getElementById('metricProduct').innerHTML =
+                `TOP 品类 <b>${top.name}</b> 占比 <b>${top.pct}%</b> | 共 ${data.category.data.length} 个品类`;
+        }
+    }
+
+    function renderActivityChart(data) {
+        const a = data.chart;
+        const container = document.getElementById('chartActivity');
+        if (!container) return;
+
+        const chart = echarts.init(container, null, { renderer: 'canvas' });
+        charts.chartActivity = chart;
+
+        chart.setOption({
+            grid: { top: 20, right: 20, bottom: 50, left: 55 },
+            color: colorPalette,
+            tooltip: {
+                backgroundColor: '#1A1D21', textStyle: { color: '#FFF' },
+                formatter: function(params) {
+                    const d = params.data;
+                    return `<b>${d[3]}</b><br/>销售额: ${d[0].toLocaleString()}<br/>距上次进货: ${d[1]} 天`;
+                }
+            },
+            xAxis: { name: '销售额', splitLine: { lineStyle: { color: '#F0F2F5' } }, axisLabel: { fontSize: 11, color: '#374151' }, nameTextStyle: { color: '#6B7280' } },
+            yAxis: { name: '距上次进货(天)', splitLine: { lineStyle: { color: '#F0F2F5' } }, axisLabel: { fontSize: 11, color: '#374151' }, nameTextStyle: { color: '#6B7280' } },
+            series: [{
+                type: 'scatter',
+                data: a.points.map(p => [p.sales, p.days, p.orders, p.name]),
+                symbolSize: function(val) { return Math.max(8, Math.min(25, val[2] * 2)); },
+                itemStyle: {
+                    color: function(params) {
                         const d = params.data;
-                        return `<b>${d[3]}</b><br/>销售额: ${d[0].toLocaleString()}<br/>距上次进货: ${d[1]} 天`;
-                    }
-                },
-                xAxis: { name: '销售额', splitLine: { lineStyle: { color: '#F0F2F5' } }, axisLabel: { fontSize: 11, color: '#374151' }, nameTextStyle: { color: '#6B7280' } },
-                yAxis: { name: '距上次进货(天)', splitLine: { lineStyle: { color: '#F0F2F5' } }, axisLabel: { fontSize: 11, color: '#374151' }, nameTextStyle: { color: '#6B7280' } },
-                series: [{
-                    type: 'scatter',
-                    data: a.points.map(p => [p.sales, p.days, p.orders, p.name]),
-                    symbolSize: function(val) { return Math.max(8, Math.min(25, val[2] * 2)); },
-                    itemStyle: {
-                        color: function(params) {
-                            const d = params.data;
-                            if (d[1] > 60) return '#EF4444';
-                            if (d[1] > 30) return '#F59E0B';
-                            return '#3B82F6';
-                        },
-                        opacity: 0.7,
+                        if (d[1] > 60) return '#EF4444';
+                        if (d[1] > 30) return '#F59E0B';
+                        return '#3B82F6';
                     },
-                }],
-            });
-            charts.chartActivity.resize();
-            document.getElementById('metricActivity').innerHTML =
-                `⚠️ 高风险 <span style="color:#EF4444">${a.riskCount || 0}</span> 家 | ⏳ 关注 <span style="color:#F59E0B">${a.warnCount || 0}</span> 家`;
-        }
+                    opacity: 0.7,
+                },
+            }],
+        });
+        chart.resize();
+        document.getElementById('metricActivity').innerHTML =
+            `⚠️ 高风险 <span style="color:#EF4444">${a.riskCount || 0}</span> 家 | ⏳ 关注 <span style="color:#F59E0B">${a.warnCount || 0}</span> 家`;
     }
 
     function renderAlerts(data) {
@@ -1553,7 +1656,7 @@
 
         if (data.dealer?.summary?.silent_long > 0 || data.dealer?.summary?.silent_short > 0) {
             const ds = data.dealer.summary;
-            html.push(`<div class="alert-block"><h4 class="orange">⏳ 静默客户预警</h4><div class="alert-item"><span>60 天未进货</span><span class="alert-val warn">${ds.silent_long} 家</span></div><div class="alert-item"><span>30 天未进货</span><span class="alert-val warn">${ds.silent_short} 家</span></div></div>`);
+            html.push(`<div class="alert-block"><h4 class="orange">⏳ 静默客户预警</h4><div class="alert-item"><span>60 天未进货</span><span class="alert-val warn">${ds.silent_long} 家</span></div><div class="alert-item"><span>30天未进货</span><span class="alert-val warn">${ds.silent_short} 家</span></div></div>`);
         }
 
         if (data.trend?.anomalies?.length) {
@@ -1624,7 +1727,6 @@
         card.className = 'dashboard-card';
         card.id = `dashboard-${config.id}`;
 
-        // 获取可用维度（所有列）和指标（数值列）
         const allCols = cleanData.length > 0 ? Object.keys(cleanData[0]) : [];
         const numCols = allCols.filter(c => columnTypes[c] === 'number');
 
@@ -1688,7 +1790,6 @@
         const card = document.getElementById(`dashboard-${id}`);
         if (card) card.remove();
 
-        // 销毁图表实例
         const chartKey = `custom-${id}`;
         if (charts[chartKey]) {
             charts[chartKey].dispose();
@@ -1707,7 +1808,6 @@
         if (!config) return;
         config.dateRange = range === 'all' ? null : range;
 
-        // 更新按钮状态
         const card = document.getElementById(`dashboard-${id}`);
         if (card) {
             card.querySelectorAll('.dc-date-btn').forEach(b => b.classList.remove('active'));
@@ -1731,7 +1831,6 @@
             return;
         }
 
-        // 聚合数据
         const filtered = filterByRegionDealer(cleanData,
             document.getElementById('filterRegion').value,
             document.getElementById('filterDealer').value);
@@ -1744,11 +1843,9 @@
             return;
         }
 
-        // 自动推荐图表类型
         const autoType = recommendChartType(config.dimension, data);
         const chartType = config.chartType || autoType;
 
-        // 渲染图表
         const chartEl = document.getElementById(`dc-chart-container-${id}`);
         if (!chartEl) return;
 
@@ -1820,8 +1917,7 @@
     }
 
     function exportChart(type) {
-        const map = { trend: 'chartTrend', dealer: 'chartDealer', region: 'chartRegion', product: 'chartProduct', activity: 'chartActivity' };
-        const chart = charts[map[type]];
+        const chart = charts[type];
         if (!chart) return;
         const url = chart.getDataURL({ type: 'png', pixelRatio: 2 });
         const a = document.createElement('a');
