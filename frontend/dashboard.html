@@ -462,12 +462,12 @@
     //  字段映射表（从 Python config.py 移植）
     // ═══════════════════════════════════════════════════════════
     const FIELD_ALIASES = {
-        order_id: ["订单号","订单编号","单号","交易单号","单据编号","order id","order_no","orderno","order no","order_no_","order_number","order_num","设备代码","设备编号","device_code","device_id","设备号"],
+        order_id: ["订单号","订单编号","单号","交易单号","单据编号","order id","order_no","orderno","order no","order_no_","order_number","order_num","设备代码","设备编号","device_code","device_id","设备号","设备唯一码","Unique ID","unique_id","设备ID"],
         order_date: ["下单日期","订单日期","交易日期","日期","下单时间","订单时间","成交日期","创建日期","下单日","order date","transaction date","date","created_at","create_date","order_time","trade_date","设备时间","上报时间","数据时间","device_time","timestamp","time"],
         customer_name: ["客户名称","经销商","门店名称","客户","经销商名称","门店","买家名称","买家","客户名","customer name","dealer","store name","client","buyer_name","buyer","customer","dealer_name"],
-        region: ["区域","地区","省份","大区","城市","所属区域","所在地区","销售区域","省份/城市","region","area","province","territory","city","district","location"],
+        region: ["区域","地区","省份","大区","城市","所属区域","所在地区","销售区域","省份/城市","region","area","province","territory","city","district","location","投放地址","Location","投放位置","地址"],
         product_name: ["商品名称","产品名称","品名","货品","商品","商品名","货品名称","商品全称","product name","item name","sku name","goods_name","product","item","sku_name","goods"],
-        product_category: ["品类","分类","类别","大类","商品分类","产品分类","品类名称","商品类别","二级分类","category","class","type","category_name","product_category","product_type","goods_category"],
+        product_category: ["品类","分类","类别","大类","商品分类","产品分类","品类名称","商品类别","二级分类","category","class","type","category_name","product_category","product_type","goods_category","设备类型","Device Type","device_type","设备种类"],
         quantity: ["数量","件数","销量","销售数量","成交数量","购买数量","订货数量","出库数量","quantity","qty","amount","sales_volume","num","count","volume"],
         unit_price: ["单价","零售价","成交价","销售价格","商品单价","产品单价","成交单价","unit price","price","retail price","sale_price","unitcost","cost_price"],
         sales_amount: ["销售额","金额","实收","营业额","gmv","销售金额","实收金额","成交金额","实际金额","应收金额","订单金额","合计","sales amount","revenue","total","gm_v","actual_amount","order_amount","amount_total","sale_amount","paid_amount"],
@@ -501,6 +501,36 @@
             }
         }
         return mapping;
+    }
+
+    // 自动识别销售额字段（当 sales_amount 未映射时）
+    function detectSalesAmountColumn(rawColumns, data) {
+        const keywords = ["金额", "销售", "实付", "营业额", "收入", "营收", "revenue", "sales", "amount", "paid", "income"];
+        const numericCols = [];
+
+        for (const col of rawColumns) {
+            const lower = col.toLowerCase();
+            // 检查是否包含关键词
+            const hasKeyword = keywords.some(kw => lower.includes(kw.toLowerCase()));
+            if (!hasKeyword) continue;
+
+            // 检查是否为数值列
+            let numCount = 0;
+            const sample = data.slice(0, Math.min(20, data.length));
+            for (const r of sample) {
+                const val = String(r[col] ?? '').trim();
+                if (val && !isNaN(parseFloat(val.replace(/[¥$€,]/g, '')))) numCount++;
+            }
+            if (numCount / sample.length > 0.7) {
+                numericCols.push(col);
+            }
+        }
+
+        // 优先返回包含"销售额"或"销售金额"的列
+        for (const col of numericCols) {
+            if (col.includes("销售额") || col.includes("销售金额") || col.includes("sales amount")) return col;
+        }
+        return numericCols[0] || null;
     }
 
     function matchAlias(col) {
@@ -549,18 +579,26 @@
         if (filtered.length < initialRows) log.push(`去除空行: ${initialRows - filtered.length} 行`);
         initialRows = filtered.length;
 
-        // 3. 去重（基于订单号）
-        const orderIdCol = 'order_id';
-        if (orderIdCol in (filtered[0] || {})) {
+        // 3. 去重（基于 [日期, 设备唯一码] 双字段组合）
+        // 注意：同一设备在不同日期出现是正常的，不能仅基于设备码去重
+        const dateColForDedup = 'order_date';
+        const idColForDedup = 'order_id';
+        const hasBothCols = dateColForDedup in (filtered[0] || {}) && idColForDedup in (filtered[0] || {});
+        if (hasBothCols) {
             const seen = new Set();
             const before = filtered.length;
             filtered = filtered.filter(r => {
-                const key = String(r[orderIdCol]);
+                const dateVal = r[dateColForDedup] instanceof Date ? r[dateColForDedup].toISOString().slice(0, 10) : String(r[dateColForDedup] ?? '');
+                const idVal = String(r[idColForDedup] ?? '');
+                const key = `${dateVal}|${idVal}`;
                 if (seen.has(key)) return false;
                 seen.add(key);
                 return true;
             });
-            if (filtered.length < before) log.push(`去重: 移除 ${before - filtered.length} 条重复订单`);
+            if (filtered.length < before) log.push(`去重: 移除 ${before - filtered.length} 条重复记录（基于日期+设备组合）`);
+        } else if (idColForDedup in (filtered[0] || {})) {
+            // 只有设备码没有日期时，不做去重（避免误删）
+            log.push('去重: 无日期字段，跳过去重');
         }
 
         // 4. 日期标准化
@@ -1146,17 +1184,29 @@
         const mappedCount = Object.keys(fieldMapping).length;
         const totalCols = columns.filter(c => c.trim()).length;
 
+        // 自动识别销售额字段（当 sales_amount 未映射时）
+        let autoDetectedSalesCol = null;
+        if (!('sales_amount' in fieldMapping)) {
+            autoDetectedSalesCol = detectSalesAmountColumn(columns, rows);
+            if (autoDetectedSalesCol) {
+                fieldMapping[autoDetectedSalesCol] = 'sales_amount';
+            }
+        }
+
         // 数据清洗
         const cleanResult = cleanRawData(rows, fieldMapping);
         cleanData = cleanRawDataFilterMissing(cleanResult.data);
         columnTypes = detectColumnTypes(cleanData);
 
-        // 显示状态
-        showStatus('✅', `已加载 ${cleanResult.stats.final_rows} 行数据`,
-            `匹配 ${mappedCount} 个字段 | 清洗移除 ${cleanResult.stats.removed_rows} 行`);
+        // 显示状态 - 包含识别到的字段信息
+        let detail = `匹配 ${mappedCount} 个字段 | 清洗移除 ${cleanResult.stats.removed_rows} 行`;
+        if (autoDetectedSalesCol) {
+            detail += ` | 已识别销售额字段：[${autoDetectedSalesCol}]`;
+        }
+        showStatus('✅', `已加载 ${cleanResult.stats.final_rows} 行数据`, detail);
 
         // 数据质量面板
-        renderQualityPanel(cleanResult, totalCols, mappedCount);
+        renderQualityPanel(cleanResult, totalCols, mappedCount, autoDetectedSalesCol);
 
         // 显示筛选器
         document.getElementById('filters').classList.add('show');
@@ -1174,7 +1224,7 @@
         document.getElementById('addDashboardBtn').classList.add('show');
     }
 
-    function renderQualityPanel(result, totalCols, mappedCount) {
+    function renderQualityPanel(result, totalCols, mappedCount, autoDetectedSalesCol) {
         const grid = document.getElementById('qualityGrid');
         const items = [];
         items.push({ icon: '📊', text: '原始数据', detail: `${totalCols} 列 / ${result.stats.initial_rows} 行` });
@@ -1190,6 +1240,9 @@
         const nullInfo = result.log.find(l => l.startsWith('空值'));
         if (nullInfo) items.push({ icon: '🔧', text: '空值处理', detail: nullInfo.replace('空值处理: ', '') });
         items.push({ icon: '📋', text: '有效数据', detail: `${result.stats.final_rows} 行` });
+        if (autoDetectedSalesCol) {
+            items.push({ icon: '💰', text: '销售额字段', detail: `[${autoDetectedSalesCol}]` });
+        }
         grid.innerHTML = items.map(item => `
             <div class="quality-item">
                 <span class="quality-icon">${item.icon}</span>
