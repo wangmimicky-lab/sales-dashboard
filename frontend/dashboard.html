@@ -4,42 +4,37 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>销售数据仪表板</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
-            background: #F5F7FA;
-            color: #1A1D21;
-            min-height: 100vh;
+            background: #F5F7FA; color: #1A1D21; min-height: 100vh;
         }
 
         /* ─── 导航 ─────────────────────────────────────── */
         .navbar {
-            background: #FFFFFF;
-            border-bottom: 1px solid #E8ECF0;
-            padding: 0 24px;
-            height: 56px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            position: sticky;
-            top: 0;
-            z-index: 100;
+            background: #FFFFFF; border-bottom: 1px solid #E8ECF0;
+            padding: 0 24px; height: 56px; display: flex;
+            align-items: center; justify-content: space-between;
+            position: sticky; top: 0; z-index: 100;
         }
         .nav-left { display: flex; align-items: center; gap: 12px; }
         .nav-logo {
-            width: 28px; height: 28px;
-            background: #3B82F6; border-radius: 6px;
+            width: 28px; height: 28px; background: #3B82F6; border-radius: 6px;
             display: flex; align-items: center; justify-content: center;
         }
         .nav-logo svg { width: 16px; height: 16px; fill: white; }
         .nav-title { font-size: 16px; font-weight: 600; }
         .nav-right { display: flex; align-items: center; gap: 12px; }
         .nav-filename { font-size: 13px; color: #6B7280; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .nav-user { font-size: 13px; color: #6B7280; }
+        .btn-logout {
+            padding: 6px 12px; border: 1px solid #E8ECF0; border-radius: 6px;
+            background: #FFF; color: #6B7280; font-size: 12px; cursor: pointer;
+        }
+        .btn-logout:hover { background: #F5F7FA; }
 
         /* ─── 主内容 ─────────────────────────────────────── */
         .main { max-width: 1400px; margin: 0 auto; padding: 24px; }
@@ -88,1861 +83,707 @@
         .config-item {
             padding: 14px; background: #F5F7FA; border-radius: 8px;
         }
-        .config-item-label { font-size: 13px; font-weight: 600; color: #1A1D21; margin-bottom: 8px; }
-        .config-item-hint { font-size: 12px; color: #9CA3AF; margin-top: 6px; }
+        .config-item-label {
+            font-size: 13px; font-weight: 600; color: #1A1D21; margin-bottom: 8px;
+            display: flex; align-items: center; gap: 6px;
+        }
+        .config-item-label .required { color: #EF4444; }
+        .config-item-label .optional { color: #9CA3AF; }
         .config-select {
             width: 100%; padding: 8px 10px; border: 1px solid #E8ECF0; border-radius: 6px;
             font-size: 13px; color: #1A1D21; background: #FFF; outline: none; cursor: pointer;
         }
         .config-select:focus { border-color: #3B82F6; }
+        .config-item-hint { font-size: 12px; color: #9CA3AF; margin-top: 6px; }
         .config-actions { margin-top: 18px; display: flex; gap: 10px; justify-content: flex-end; }
         .config-btn {
             padding: 8px 16px; border-radius: 6px; font-size: 13px; cursor: pointer;
-            transition: all 0.2s; border: 1px solid #E8ECF0;
+            border: 1px solid #E8ECF0; background: #FFF; color: #1A1D21;
         }
-        .config-btn-primary { background: #3B82F6; color: #FFF; border-color: #3B82F6; }
-        .config-btn-primary:hover { background: #2563EB; }
-        .config-btn-secondary { background: #F5F7FA; color: #6B7280; }
-        .config-btn-secondary:hover { background: #E8ECF0; }
+        .config-btn:hover { background: #F5F7FA; }
+        .config-btn.primary {
+            background: #3B82F6; color: #FFF; border-color: #3B82F6;
+        }
+        .config-btn.primary:hover { background: #2563EB; }
+        .config-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-        /* ─── 数据质量面板 ─────────────────────────────────────── */
-        .quality-panel {
-            display: none; background: #FFFFFF; border-radius: 10px;
-            padding: 16px 20px; margin-bottom: 20px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+        /* ─── 警告提示 ─────────────────────────────────────── */
+        .warning-banner {
+            background: #FEF3C7; border: 1px solid #F59E0B; border-radius: 8px;
+            padding: 12px 16px; margin-bottom: 16px; display: flex;
+            align-items: center; gap: 10px; font-size: 13px; color: #92400E;
         }
-        .quality-panel.show { display: block; }
-        .quality-title { font-size: 14px; font-weight: 600; margin-bottom: 12px; }
-        .quality-grid {
-            display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px;
-        }
-        .quality-item {
-            display: flex; align-items: center; gap: 8px;
-            padding: 10px 12px; background: #F5F7FA; border-radius: 6px;
-        }
-        .quality-icon { font-size: 16px; }
-        .quality-text { font-size: 13px; }
-        .quality-text span { color: #6B7280; font-size: 11px; display: block; }
+        .warning-banner .icon { font-size: 18px; }
 
-        /* ─── 筛选器 ─────────────────────────────────────── */
-        .filters {
-            display: none; background: #FFFFFF; border-radius: 10px;
-            padding: 14px 20px; margin-bottom: 20px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-            align-items: center; gap: 16px; flex-wrap: wrap;
+        /* ─── 预览区 ─────────────────────────────────────── */
+        .preview-section {
+            background: #FFFFFF; border-radius: 10px; padding: 20px;
+            margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.06);
         }
-        .filters.show { display: flex; }
-        .filter-group { display: flex; align-items: center; gap: 8px; }
+        .preview-title { font-size: 15px; font-weight: 600; margin-bottom: 12px; }
+        .preview-table {
+            width: 100%; border-collapse: collapse; font-size: 13px;
+        }
+        .preview-table th {
+            background: #F5F7FA; padding: 8px 12px; text-align: left;
+            border-bottom: 2px solid #E8ECF0; font-weight: 600; color: #6B7280;
+        }
+        .preview-table td {
+            padding: 8px 12px; border-bottom: 1px solid #F0F0F0;
+        }
+
+        /* ─── 仪表板 ─────────────────────────────────────── */
+        .dashboard-section { display: none; }
+        .dashboard-section.show { display: block; }
+
+        /* 筛选栏 */
+        .filter-bar {
+            background: #FFFFFF; border-radius: 10px; padding: 16px 20px;
+            margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+            display: flex; flex-wrap: wrap; gap: 12px; align-items: center;
+        }
+        .filter-item { display: flex; align-items: center; gap: 8px; }
         .filter-label { font-size: 13px; color: #6B7280; white-space: nowrap; }
         .filter-select {
-            padding: 6px 10px; border: 1px solid #E8ECF0; border-radius: 4px;
-            font-size: 13px; color: #1A1D21; background: #FAFBFC;
-            outline: none; cursor: pointer; min-width: 110px;
+            padding: 6px 10px; border: 1px solid #E8ECF0; border-radius: 6px;
+            font-size: 13px; color: #1A1D21; background: #FFF; outline: none;
         }
-        .filter-select:focus { border-color: #3B82F6; }
-        .granularity-group {
-            display: flex; align-items: center; gap: 4px; margin-left: auto;
-        }
+        .granularity-group { display: flex; gap: 4px; margin-left: auto; }
         .granularity-btn {
-            padding: 5px 12px; border: 1px solid #E8ECF0; border-radius: 6px;
-            font-size: 12px; color: #6B7280; background: #FAFBFC;
-            cursor: pointer; transition: all 0.15s;
+            padding: 6px 12px; border: 1px solid #E8ECF0; background: #FFF;
+            font-size: 12px; cursor: pointer; color: #6B7280;
         }
-        .granularity-btn:hover { border-color: #3B82F6; color: #3B82F6; }
+        .granularity-btn:first-child { border-radius: 6px 0 0 6px; }
+        .granularity-btn:last-child { border-radius: 0 6px 6px 0; }
         .granularity-btn.active { background: #3B82F6; color: #FFF; border-color: #3B82F6; }
 
-        /* ─── 层级标题 ─────────────────────────────────────── */
-        .layer-title {
-            font-size: 15px; font-weight: 600; color: #1A1D21;
-            margin: 24px 0 12px; padding-left: 10px;
-            border-left: 3px solid #3B82F6;
-        }
-        .layer-title:first-child { margin-top: 0; }
-
-        /* ─── KPI 驾驶舱 ─────────────────────────────────────── */
-        .kpi-row {
-            display: none; grid-template-columns: repeat(6, 1fr);
-            gap: 14px; margin-bottom: 20px;
-        }
-        .kpi-row.show { display: grid; }
-
-        .kpi-card {
-            background: #FFFFFF; border-radius: 10px; padding: 16px 18px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-            border-top: 3px solid #3B82F6;
-        }
-        .kpi-card.green { border-top-color: #10B981; }
-        .kpi-card.orange { border-top-color: #F59E0B; }
-        .kpi-card.red { border-top-color: #EF4444; }
-        .kpi-card.purple { border-top-color: #8B5CF6; }
-        .kpi-card.blue { border-top-color: #06B6D4; }
-
-        .kpi-label { font-size: 12px; color: #6B7280; margin-bottom: 6px; }
-        .kpi-value { font-size: 22px; font-weight: 700; color: #1A1D21; font-variant-numeric: tabular-nums; }
-        .kpi-sub { font-size: 11px; color: #9CA3AF; margin-top: 4px; }
-        .kpi-trend { font-size: 12px; margin-top: 4px; }
-        .kpi-trend.up { color: #10B981; }
-        .kpi-trend.down { color: #EF4444; }
-
-        /* ─── 图表网格 ─────────────────────────────────────── */
-        .charts-grid {
-            display: none; grid-template-columns: repeat(2, 1fr);
+        /* KPI 卡片 */
+        .kpi-grid {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
             gap: 16px; margin-bottom: 20px;
         }
-        .charts-grid.show { display: grid; }
+        .kpi-card {
+            background: #FFFFFF; border-radius: 10px; padding: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+        }
+        .kpi-label { font-size: 13px; color: #6B7280; margin-bottom: 8px; }
+        .kpi-value { font-size: 28px; font-weight: 700; color: #1A1D21; }
+        .kpi-sub { font-size: 12px; color: #9CA3AF; margin-top: 4px; }
+        .kpi-value.red { color: #EF4444; }
+        .kpi-value.green { color: #10B981; }
+        .kpi-value.blue { color: #3B82F6; }
 
+        /* 图表网格 */
+        .chart-grid {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+            gap: 20px; margin-bottom: 20px;
+        }
         .chart-card {
             background: #FFFFFF; border-radius: 10px; padding: 20px;
             box-shadow: 0 1px 3px rgba(0,0,0,0.06);
         }
-        .chart-card.full { grid-column: 1 / -1; }
+        .chart-title {
+            font-size: 15px; font-weight: 600; margin-bottom: 16px;
+            display: flex; align-items: center; justify-content: space-between;
+        }
+        .chart-container { width: 100%; height: 380px; }
 
-        .chart-header {
-            display: flex; justify-content: space-between;
-            align-items: center; margin-bottom: 10px;
+        /* 加载动画 */
+        .loading {
+            display: flex; align-items: center; justify-content: center;
+            padding: 40px; color: #9CA3AF; font-size: 14px;
         }
-        .chart-title { font-size: 14px; font-weight: 600; }
-        .chart-export-btn {
-            background: none; border: 1px solid #E8ECF0; border-radius: 4px;
-            padding: 4px 10px; font-size: 12px; color: #6B7280;
-            cursor: pointer; transition: all 0.2s;
+        .spinner {
+            width: 20px; height: 20px; border: 2px solid #E8ECF0;
+            border-top-color: #3B82F6; border-radius: 50%;
+            animation: spin 0.8s linear infinite; margin-right: 8px;
         }
-        .chart-export-btn:hover { border-color: #3B82F6; color: #3B82F6; }
+        @keyframes spin { to { transform: rotate(360deg); } }
 
-        .chart-container { width: 100%; height: 340px; }
-        .chart-container.tall { height: 400px; }
-
-        .chart-metric { margin-top: 8px; font-size: 13px; color: #6B7280; }
-        .chart-metric .up { color: #10B981; }
-        .chart-metric .down { color: #EF4444; }
-
-        /* ─── 自定义看板 ─────────────────────────────────────── */
-        .custom-dashboards {
-            display: none; flex-direction: column; gap: 16px; margin-bottom: 20px;
-        }
-        .custom-dashboards.show { display: flex; }
-
-        .dashboard-card {
-            background: #FFFFFF; border-radius: 10px; padding: 20px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-            position: relative;
-        }
-        .dashboard-card-header {
-            display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;
-        }
-        .dashboard-card-title {
-            font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 8px;
-        }
-        .dashboard-card-title .num {
-            background: #3B82F6; color: #FFF; width: 22px; height: 22px;
-            border-radius: 50%; display: flex; align-items: center; justify-content: center;
-            font-size: 12px; font-weight: 600;
-        }
-        .dashboard-delete-btn {
-            background: none; border: 1px solid #E8ECF0; border-radius: 4px;
-            padding: 4px 10px; font-size: 12px; color: #EF4444;
-            cursor: pointer; transition: all 0.2s;
-        }
-        .dashboard-delete-btn:hover { background: #FEF2F2; border-color: #EF4444; }
-
-        .dashboard-controls {
-            display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 14px;
-            padding: 12px; background: #F5F7FA; border-radius: 8px;
-        }
-        .dc-group { display: flex; align-items: center; gap: 6px; }
-        .dc-label { font-size: 12px; color: #6B7280; white-space: nowrap; }
-        .dc-select {
-            padding: 5px 8px; border: 1px solid #E8ECF0; border-radius: 4px;
-            font-size: 12px; color: #1A1D21; background: #FFF;
-            outline: none; cursor: pointer; min-width: 100px;
-        }
-        .dc-select:focus { border-color: #3B82F6; }
-        .dc-date-group { display: flex; align-items: center; gap: 6px; }
-        .dc-date-btn {
-            padding: 4px 10px; border: 1px solid #E8ECF0; border-radius: 4px;
-            font-size: 11px; color: #6B7280; background: #FAFBFC;
-            cursor: pointer; transition: all 0.15s;
-        }
-        .dc-date-btn:hover { border-color: #3B82F6; color: #3B82F6; }
-        .dc-date-btn.active { background: #3B82F6; color: #FFF; border-color: #3B82F6; }
-
-        .dashboard-chart { width: 100%; height: 340px; }
-
-        .add-dashboard-btn {
-            display: none; background: #FFFFFF; border: 2px dashed #D1D5DB;
-            border-radius: 10px; padding: 16px; text-align: center;
-            cursor: pointer; transition: all 0.2s;
-            font-size: 14px; color: #6B7280;
-        }
-        .add-dashboard-btn.show { display: block; }
-        .add-dashboard-btn:hover { border-color: #3B82F6; color: #3B82F6; background: #EFF6FF; }
-
-        /* ─── 红黑榜 ─────────────────────────────────────── */
-        .alert-section {
-            display: none; background: #FFFFFF; border-radius: 10px;
-            padding: 20px; margin-bottom: 20px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-        }
-        .alert-section.show { display: block; }
-
-        .alert-grid {
-            display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;
-        }
-
-        .alert-block {
-            border: 1px solid #F0F2F5; border-radius: 8px; padding: 14px;
-        }
-        .alert-block h4 {
-            font-size: 13px; font-weight: 600; margin-bottom: 10px;
-            padding-bottom: 8px; border-bottom: 1px solid #F0F2F5;
-        }
-        .alert-block h4.red { color: #EF4444; }
-        .alert-block h4.orange { color: #F59E0B; }
-        .alert-block h4.blue { color: #3B82F6; }
-
-        .alert-item {
-            font-size: 13px; color: #1A1D21; padding: 6px 0;
-            border-bottom: 1px solid #F9FAFB; display: flex;
-            justify-content: space-between; align-items: center;
-        }
-        .alert-item:last-child { border-bottom: none; }
-        .alert-val { font-weight: 600; font-variant-numeric: tabular-nums; }
-        .alert-val.down { color: #EF4444; }
-        .alert-val.warn { color: #F59E0B; }
-        .alert-val.info { color: #3B82F6; }
-
-        /* ─── 洞察区 ─────────────────────────────────────── */
-        .insights {
-            display: none; background: #FFFFFF; border-radius: 10px;
-            padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-        }
-        .insights.show { display: block; }
-        .insights-title { font-size: 14px; font-weight: 600; margin-bottom: 10px; }
-        .insight-item {
-            font-size: 13px; color: #1A1D21; padding: 6px 0;
-            border-bottom: 1px solid #F0F2F5; line-height: 1.6;
-        }
-        .insight-item:last-child { border-bottom: none; }
-
-        /* ─── 数据预览 ─────────────────────────────────────── */
-        .data-preview {
-            display: none; background: #FFFFFF; border-radius: 10px;
-            padding: 20px; margin-bottom: 20px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-        }
-        .data-preview.show { display: block; }
-        .preview-title { font-size: 14px; font-weight: 600; margin-bottom: 12px; }
-        .preview-table {
-            width: 100%; border-collapse: collapse; font-size: 12px;
-            max-height: 300px; overflow-y: auto; display: block;
-        }
-        .preview-table th {
-            position: sticky; top: 0; background: #F5F7FA; padding: 8px 10px;
-            text-align: left; border-bottom: 2px solid #E8ECF0; font-weight: 600;
-        }
-        .preview-table td {
-            padding: 6px 10px; border-bottom: 1px solid #F0F2F5;
-        }
-        .preview-table tr:hover { background: #FAFBFC; }
-
-        /* ─── 处理日志 ─────────────────────────────────────── */
-        .processing-log {
-            display: none; background: #FFFFFF; border-radius: 10px;
-            padding: 20px; margin-bottom: 20px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-        }
-        .processing-log.show { display: block; }
-        .log-title { font-size: 14px; font-weight: 600; margin-bottom: 12px; }
-        .log-content {
-            background: #F5F7FA; border-radius: 6px; padding: 12px;
-            font-size: 12px; color: #374151; line-height: 1.8;
-            max-height: 200px; overflow-y: auto;
-        }
-        .log-item { padding: 2px 0; }
-        .log-item.error { color: #EF4444; }
-        .log-item.warn { color: #F59E0B; }
-        .log-item.success { color: #10B981; }
-
-        /* ─── 响应式 ─────────────────────────────────────── */
-        @media (max-width: 1024px) {
-            .kpi-row { grid-template-columns: repeat(3, 1fr); }
-            .alert-grid { grid-template-columns: 1fr; }
-        }
+        /* 响应式 */
         @media (max-width: 768px) {
-            .kpi-row { grid-template-columns: repeat(2, 1fr); }
-            .charts-grid { grid-template-columns: 1fr; }
-            .main { padding: 16px; }
-            .filters { flex-direction: column; align-items: stretch; }
-            .filter-group { width: 100%; }
-            .filter-select { width: 100%; }
-            .granularity-group { margin-left: 0; margin-top: 8px; }
-            .quality-grid { grid-template-columns: 1fr 1fr; }
-            .dashboard-controls { flex-direction: column; }
+            .main { padding: 12px; }
+            .chart-grid { grid-template-columns: 1fr; }
+            .kpi-grid { grid-template-columns: repeat(2, 1fr); }
             .config-grid { grid-template-columns: 1fr; }
+            .filter-bar { flex-direction: column; align-items: flex-start; }
+            .granularity-group { margin-left: 0; }
         }
     </style>
 </head>
 <body>
+<div id="app">
+    <!-- 导航栏 -->
     <nav class="navbar">
         <div class="nav-left">
             <div class="nav-logo">
-                <svg viewBox="0 0 24 24"><path d="M3 3v18h18V3H3zm16 16H5V5h14v14zM7 12h2v5H7v-5zm4-3h2v8h-2V9zm4-2h2v10h-2V7z"/></svg>
+                <svg viewBox="0 0 16 16"><path d="M2 2h12v12H2V2zm1 1v10h10V3H3zm2 2h2v6H5V5zm3 0h2v4H8V5zm3 0h2v6h-2V5z"/></svg>
             </div>
             <span class="nav-title">销售数据仪表板</span>
         </div>
         <div class="nav-right">
-            <span class="nav-filename" id="navFilename"></span>
+            <span class="nav-filename" v-if="filename">{{ filename }}</span>
+            <span class="nav-user">{{ username }}</span>
+            <button class="btn-logout" @click="logout">退出</button>
         </div>
     </nav>
 
     <div class="main">
         <!-- 上传区 -->
         <div class="upload-section">
-            <div class="upload-area" id="uploadArea">
-                <div class="upload-icon">📁</div>
+            <div class="upload-area"
+                 @click="$refs.fileInput.click()"
+                 @dragover.prevent="dragover = true"
+                 @dragleave.prevent="dragover = false"
+                 @drop.prevent="handleDrop"
+                 :class="{ dragover: dragover }">
+                <div class="upload-icon">📊</div>
                 <div class="upload-text">拖拽文件到此处，或 <span>点击选择文件</span></div>
-                <div class="upload-hint">支持 CSV、Excel 格式</div>
+                <div class="upload-hint">支持 CSV / Excel 文件，自动识别字段</div>
             </div>
-            <input type="file" id="fileInput" accept=".csv,.xlsx,.xls">
+            <input type="file" ref="fileInput" accept=".csv,.xlsx,.xls" @change="handleFileSelect" />
         </div>
 
         <!-- 状态栏 -->
-        <div class="status-bar" id="statusBar">
-            <span class="status-icon" id="statusIcon">⏳</span>
+        <div class="status-bar" :class="{ show: uploadStatus }">
+            <span class="status-icon">{{ uploadStatus === 'success' ? '✅' : uploadStatus === 'error' ? '❌' : '⏳' }}</span>
             <div class="status-text">
-                <span id="statusMsg">处理中...</span>
-                <small id="statusDetail"></small>
+                {{ statusMessage }}
+                <small v-if="uploadStatus === 'success'">
+                    已识别 {{ Object.keys(autoMapping).length }} 个字段，请确认映射后开始分析
+                </small>
             </div>
+        </div>
+
+        <!-- 警告提示 -->
+        <div class="warning-banner" v-if="missingRequired.length > 0">
+            <span class="icon">⚠️</span>
+            <span>数据不足，无法生成完整分析。缺少必需字段：{{ missingRequired.join('、') }}</span>
         </div>
 
         <!-- 字段配置面板 -->
-        <div class="config-panel" id="configPanel">
-            <div class="config-title">🔧 字段配置 - 请指定各字段对应的列</div>
-            <div class="config-grid" id="configGrid"></div>
+        <div class="config-panel" :class="{ show: columns.length > 0 }">
+            <div class="config-title">📋 字段映射配置</div>
+            <div class="config-grid">
+                <div class="config-item" v-for="field in standardFields" :key="field.name">
+                    <div class="config-item-label">
+                        {{ field.display_name }}
+                        <span v-if="field.required" class="required">*</span>
+                        <span v-else class="optional">(可选)</span>
+                    </div>
+                    <select class="config-select" v-model="fieldMapping[field.name]" @change="onMappingChange">
+                        <option value="">-- 不映射 --</option>
+                        <option v-for="col in columns" :key="col" :value="col">
+                            {{ col }}
+                        </option>
+                    </select>
+                    <div class="config-item-hint" v-if="fieldMapping[field.name]">
+                        已映射: {{ fieldMapping[field.name] }}
+                    </div>
+                </div>
+            </div>
             <div class="config-actions">
-                <button class="config-btn config-btn-secondary" onclick="skipConfig()">跳过（使用自动识别）</button>
-                <button class="config-btn config-btn-primary" onclick="confirmConfig()">确认并生成图表</button>
+                <button class="config-btn" @click="resetMapping">重置</button>
+                <button class="config-btn primary"
+                        @click="processData"
+                        :disabled="!canProcess || processing">
+                    {{ processing ? '处理中...' : '开始分析' }}
+                </button>
             </div>
         </div>
 
-        <!-- 数据质量面板 -->
-        <div class="quality-panel" id="qualityPanel">
-            <div class="quality-title">📋 数据质量报告</div>
-            <div class="quality-grid" id="qualityGrid"></div>
-        </div>
-
-        <!-- 处理日志 -->
-        <div class="processing-log" id="processingLog">
-            <div class="log-title">📝 处理日志</div>
-            <div class="log-content" id="logContent"></div>
-        </div>
-
-        <!-- 原始数据预览 -->
-        <div class="data-preview" id="dataPreview">
-            <div class="preview-title">📊 原始数据预览（前 20 行）</div>
+        <!-- 数据预览 -->
+        <div class="preview-section" v-if="preview.length > 0">
+            <div class="preview-title">📄 数据预览（前 5 行）</div>
             <div style="overflow-x: auto;">
-                <table class="preview-table" id="previewTable"></table>
+                <table class="preview-table">
+                    <thead>
+                        <tr>
+                            <th v-for="col in columns" :key="col">{{ col }}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="(row, i) in preview" :key="i">
+                            <td v-for="col in columns" :key="col">{{ row[col] }}</td>
+                        </tr>
+                    </tbody>
+                </table>
             </div>
         </div>
 
-        <!-- 筛选器 -->
-        <div class="filters" id="filters">
-            <div class="filter-group">
-                <span class="filter-label">区域:</span>
-                <select class="filter-select" id="filterRegion" onchange="applyFilters()">
-                    <option value="全部">全部</option>
-                </select>
+        <!-- 仪表板 -->
+        <div class="dashboard-section" :class="{ show: analysisData }">
+            <!-- 筛选栏 -->
+            <div class="filter-bar">
+                <div class="filter-item" v-for="(values, field) in filterOptions" :key="field">
+                    <span class="filter-label">{{ fieldNames[field] }}:</span>
+                    <select class="filter-select" v-model="activeFilters[field]" @change="refreshAnalysis">
+                        <option value="全部">全部</option>
+                        <option v-for="v in values" :key="v" :value="v">{{ v }}</option>
+                    </select>
+                </div>
+                <div class="granularity-group">
+                    <button class="granularity-btn" :class="{ active: granularity === 'day' }" @click="changeGranularity('day')">日</button>
+                    <button class="granularity-btn" :class="{ active: granularity === 'week' }" @click="changeGranularity('week')">周</button>
+                    <button class="granularity-btn" :class="{ active: granularity === 'month' }" @click="changeGranularity('month')">月</button>
+                </div>
             </div>
-            <div class="filter-group">
-                <span class="filter-label">经销商:</span>
-                <select class="filter-select" id="filterDealer" onchange="applyFilters()">
-                    <option value="全部">全部</option>
-                </select>
+
+            <!-- KPI 卡片 -->
+            <div class="kpi-grid" v-if="analysisData.summary">
+                <div class="kpi-card">
+                    <div class="kpi-label">总销售额</div>
+                    <div class="kpi-value blue">{{ formatNumber(analysisData.summary.total_revenue) }}</div>
+                    <div class="kpi-sub">{{ analysisData.summary.total_orders || 0 }} 笔订单</div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-label">平均客单价</div>
+                    <div class="kpi-value">{{ formatNumber(analysisData.summary.avg_revenue) }}</div>
+                </div>
+                <div class="kpi-card" v-if="analysisData.summary.sales_target">
+                    <div class="kpi-label">目标达成率</div>
+                    <div class="kpi-value" :class="getAchievementClass(analysisData.summary.achievement_rate)">
+                        {{ analysisData.summary.achievement_rate }}%
+                    </div>
+                    <div class="kpi-sub">缺口: {{ formatNumber(analysisData.summary.revenue_gap) }}</div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-label">数据范围</div>
+                    <div class="kpi-value" style="font-size: 16px;">
+                        {{ analysisData.summary.date_range?.start || '--' }}
+                    </div>
+                    <div class="kpi-sub">至 {{ analysisData.summary.date_range?.end || '--' }}</div>
+                </div>
             </div>
-            <div class="granularity-group">
-                <span class="filter-label">粒度:</span>
-                <button class="granularity-btn active" data-gran="auto" onclick="setGranularity('auto')">自动</button>
-                <button class="granularity-btn" data-gran="day" onclick="setGranularity('day')">日</button>
-                <button class="granularity-btn" data-gran="week" onclick="setGranularity('week')">周</button>
-                <button class="granularity-btn" data-gran="month" onclick="setGranularity('month')">月</button>
+
+            <!-- 图表 -->
+            <div class="chart-grid">
+                <div class="chart-card" v-for="chart in chartConfigs" :key="chart.id">
+                    <div class="chart-title">
+                        <span>{{ chart.title }}</span>
+                    </div>
+                    <div :id="chart.id" class="chart-container"></div>
+                </div>
             </div>
-        </div>
-
-        <!-- ═══ 第一层：KPI 驾驶舱 ═══ -->
-        <div class="layer-title" id="layerKpiTitle" style="display:none">📊 核心指标概览</div>
-        <div class="kpi-row" id="kpiRow"></div>
-
-        <!-- ═══ 第二层：图表分析 ═══ -->
-        <div class="layer-title" id="layerChartTitle" style="display:none">📈 数据分析</div>
-        <div class="charts-grid" id="chartsGrid"></div>
-
-        <!-- ═══ 自定义看板 ═══ -->
-        <div class="layer-title" id="layerCustomTitle" style="display:none">🛠️ 自定义看板</div>
-        <div class="custom-dashboards" id="customDashboards"></div>
-        <div class="add-dashboard-btn" id="addDashboardBtn" onclick="addDashboard()">＋ 添加看板</div>
-
-        <!-- ═══ 第三层：红黑榜 ═══ -->
-        <div class="alert-section" id="alertSection">
-            <div class="alert-grid" id="alertGrid"></div>
-        </div>
-
-        <!-- 洞察文字 -->
-        <div class="insights" id="insights">
-            <div class="insights-title">📝 数据洞察</div>
-            <div id="insightsContent"></div>
         </div>
     </div>
-
-    <script>
-    // ═══════════════════════════════════════════════════════════
-    //  全局状态
-    // ═══════════════════════════════════════════════════════════
-    let rawData = [];
-    let cleanData = [];
-    let fieldMapping = {};
-    let columnTypes = {};
-    let charts = {};
-    let currentGranularity = 'auto';
-    let chartsInitialized = false;
-    let dashboardCounter = 0;
-    let dashboards = [];
-    let colorPalette = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#06B6D4'];
-    let processingLogs = [];
-    let userConfig = {}; // 用户配置的字段映射
-
-    // ═══════════════════════════════════════════════════════════
-    //  字段映射表
-    // ═══════════════════════════════════════════════════════════
-    const FIELD_ALIASES = {
-        order_id: ["订单号","订单编号","单号","交易单号","单据编号","order id","order_no","orderno","order no","order_no_","order_number","order_num","设备代码","设备编号","device_code","device_id","设备号","设备唯一码","Unique ID","unique_id","设备ID"],
-        order_date: ["下单日期","订单日期","交易日期","日期","下单时间","订单时间","成交日期","创建日期","下单日","order date","transaction date","date","created_at","create_date","order_time","trade_date","设备时间","上报时间","数据时间","device_time","timestamp","time"],
-        customer_name: ["客户名称","经销商","门店名称","客户","经销商名称","门店","买家名称","买家","客户名","customer name","dealer","store name","client","buyer_name","buyer","customer","dealer_name"],
-        region: ["区域","地区","省份","大区","城市","所属区域","所在地区","销售区域","省份/城市","region","area","province","territory","city","district","location","投放地址","Location","投放位置","地址"],
-        product_name: ["商品名称","产品名称","品名","货品","商品","商品名","货品名称","商品全称","product name","item name","sku name","goods_name","product","item","sku_name","goods"],
-        product_category: ["品类","分类","类别","大类","商品分类","产品分类","品类名称","商品类别","二级分类","category","class","type","category_name","product_category","product_type","goods_category","设备类型","Device Type","device_type","设备种类"],
-        quantity: ["数量","件数","销量","销售数量","成交数量","购买数量","订货数量","出库数量","quantity","qty","amount","sales_volume","num","count","volume"],
-        unit_price: ["单价","零售价","成交价","销售价格","商品单价","产品单价","成交单价","unit price","price","retail price","sale_price","unitcost","cost_price"],
-        sales_amount: ["销售额","金额","实收","营业额","gmv","销售金额","实收金额","成交金额","实际金额","应收金额","订单金额","合计","sales amount","revenue","total","gm_v","actual_amount","order_amount","amount_total","sale_amount","paid_amount"],
-        discount_rate: ["折扣","折扣率","优惠率","折扣比例","discount","discount rate","discount_rate","discount_pct","preferential_rate"],
-    };
-
-    const ALIAS_TO_STANDARD = {};
-    for (const [standard, aliases] of Object.entries(FIELD_ALIASES)) {
-        for (const alias of aliases) {
-            ALIAS_TO_STANDARD[alias.trim().toLowerCase()] = standard;
-        }
-    }
-
-    // ═══════════════════════════════════════════════════════════
-    //  字段映射引擎
-    // ═══════════════════════════════════════════════════════════
-    function mapColumns(rawColumns) {
-        const mapping = {};
-        const usedStandards = new Set();
-
-        for (const col of rawColumns) {
-            const stripped = col.trim();
-            if (!stripped) continue;
-
-            const standard = matchAlias(stripped);
-            if (standard && !usedStandards.has(standard)) {
-                mapping[stripped] = standard;
-                usedStandards.add(standard);
-            }
-        }
-        return mapping;
-    }
-
-    function matchAlias(col) {
-        const key = col.toLowerCase().trim();
-        if (ALIAS_TO_STANDARD[key]) return ALIAS_TO_STANDARD[key];
-
-        const cleaned = key.replace(/[\s_\-\.\(\)\//]/g, '');
-        for (const [alias, standard] of Object.entries(ALIAS_TO_STANDARD)) {
-            if (cleaned === alias.replace(/[\s_\-\.\(\)\//]/g, '')) return standard;
-        }
-
-        for (const [alias, standard] of Object.entries(ALIAS_TO_STANDARD)) {
-            const aliasLower = alias.toLowerCase();
-            if (aliasLower.includes(key) && key.length >= 2) return standard;
-            if (key.includes(aliasLower) && aliasLower.length >= 2) return standard;
-        }
-        return null;
-    }
-
-    // ═══════════════════════════════════════════════════════════
-    //  数据清洗引擎
-    // ═══════════════════════════════════════════════════════════
-    function cleanRawData(rows, mapping) {
-        const log = [];
-        let initialRows = rows.length;
-
-        // 1. 重命名列
-        const renamed = rows.map(row => {
-            const newRow = {};
-            for (const [raw, standard] of Object.entries(mapping)) {
-                if (row[raw] !== undefined) newRow[standard] = row[raw];
-            }
-            for (const key of Object.keys(row)) {
-                if (!mapping[key]) newRow[key] = row[key];
-            }
-            return newRow;
-        });
-
-        // 2. 去除空行
-        const idCol = mapping['订单号'] || mapping['order_id'] || Object.keys(mapping).length > 0 ? Object.values(mapping)[0] : null;
-        let filtered = idCol ? renamed.filter(r => r[idCol] != null && String(r[idCol]).trim() !== '') : renamed;
-        if (filtered.length < initialRows) {
-            log.push({ type: 'warn', text: `去除空行: ${initialRows - filtered.length} 行` });
-        }
-        initialRows = filtered.length;
-
-        // 3. 去重
-        const dateColForDedup = 'order_date';
-        const idColForDedup = 'order_id';
-        const hasBothCols = dateColForDedup in (filtered[0] || {}) && idColForDedup in (filtered[0] || {});
-        if (hasBothCols) {
-            const seen = new Set();
-            const before = filtered.length;
-            filtered = filtered.filter(r => {
-                const dateVal = r[dateColForDedup] instanceof Date ? r[dateColForDedup].toISOString().slice(0, 10) : String(r[dateColForDedup] ?? '');
-                const idVal = String(r[idColForDedup] ?? '');
-                const key = `${dateVal}|${idVal}`;
-                if (seen.has(key)) return false;
-                seen.add(key);
-                return true;
-            });
-            if (filtered.length < before) {
-                log.push({ type: 'warn', text: `去重: 移除 ${before - filtered.length} 条重复记录（基于日期+设备组合）` });
-            }
-        } else if (idColForDedup in (filtered[0] || {})) {
-            log.push({ type: 'warn', text: '去重: 无日期字段，跳过去重' });
-        }
-
-        // 4. 日期标准化
-        if ('order_date' in (filtered[0] || {})) {
-            let dateErrors = 0;
-            filtered = filtered.map(r => {
-                if (r.order_date == null) return r;
-                let d = String(r.order_date).trim();
-                d = d.replace(/[年月]/g, '-').replace(/日$/g, '').replace(/-{2,}/g, '-').replace(/[/\s]+/g, '');
-                if (/^\d{8}$/.test(d)) {
-                    d = d.slice(0,4) + '-' + d.slice(4,6) + '-' + d.slice(6,8);
-                }
-                const parsed = new Date(d);
-                if (isNaN(parsed.getTime())) {
-                    dateErrors++;
-                    return r;
-                }
-                return { ...r, order_date: parsed };
-            });
-            if (dateErrors > 0) {
-                log.push({ type: 'error', text: `日期转换: ${dateErrors} 条无法解析` });
-            } else {
-                log.push({ type: 'success', text: '日期转换: 全部成功' });
-            }
-        }
-
-        // 5. 数值列清理
-        const numericCols = ['sales_amount', 'quantity', 'unit_price', 'discount_rate'];
-        let cleanedCount = 0;
-        for (const col of numericCols) {
-            if (!(col in (filtered[0] || {}))) continue;
-            filtered = filtered.map(r => {
-                if (r[col] == null) return { ...r, [col]: 0 };
-                let val = String(r[col]).trim();
-                val = val.replace(/[¥$€£,]/g, '').replace(/%/g, '');
-                const num = parseFloat(val);
-                if (col === 'discount_rate' && String(r[col]).includes('%')) {
-                    return { ...r, [col]: isNaN(num) ? 0 : num / 100 };
-                }
-                return { ...r, [col]: isNaN(num) ? 0 : num };
-            });
-            cleanedCount++;
-        }
-        if (cleanedCount > 0) {
-            log.push({ type: 'success', text: `数值清理: ${cleanedCount} 个数值列已标准化` });
-        }
-
-        // 6. 空值处理
-        const nullSummary = {};
-        for (const col of Object.keys(filtered[0] || {})) {
-            let nc = 0;
-            for (const r of filtered) {
-                if (r[col] == null || r[col] === '') nc++;
-            }
-            if (nc === 0) continue;
-            nullSummary[col] = nc;
-            const isNumeric = numericCols.includes(col);
-            filtered = filtered.map(r => ({
-                ...r,
-                [col]: (r[col] == null || r[col] === '') ? (isNumeric ? 0 : '未知') : r[col]
-            }));
-        }
-        if (Object.keys(nullSummary).length > 0) {
-            log.push({ type: 'warn', text: `空值处理: ${Object.entries(nullSummary).map(([k,v]) => `${k}: ${v}`).join(', ')}` });
-        }
-
-        const finalRows = filtered.length;
-        const stats = {
-            initial_rows: rows.length,
-            final_rows: finalRows,
-            removed_rows: rows.length - finalRows,
-            removal_rate: `${((rows.length - finalRows) / Math.max(rows.length, 1) * 100).toFixed(1)}%`,
-        };
-
-        return { data: filtered, log, stats };
-    }
-
-    // ═══════════════════════════════════════════════════════════
-    //  列类型检测
-    // ═══════════════════════════════════════════════════════════
-    function detectColumnTypes(data) {
-        const types = {};
-        if (data.length === 0) return types;
-        const cols = Object.keys(data[0]);
-        for (const col of cols) {
-            if (col === 'order_date') { types[col] = 'date'; continue; }
-            let numCount = 0;
-            const sample = data.slice(0, Math.min(50, data.length));
-            for (const r of sample) {
-                if (r[col] != null && r[col] !== '' && !isNaN(parseFloat(r[col]))) numCount++;
-            }
-            types[col] = numCount / sample.length > 0.8 ? 'number' : 'text';
-        }
-        return types;
-    }
-
-    // ═══════════════════════════════════════════════════════════
-    //  字段配置面板
-    // ═══════════════════════════════════════════════════════════
-    const CONFIG_FIELDS = [
-        { key: 'order_date', label: '时间字段', hint: '用于趋势分析和时间筛选', type: 'date' },
-        { key: 'sales_amount', label: '销售额字段', hint: '用于所有金额计算和图表', type: 'number' },
-        { key: 'order_id', label: '设备唯一码/订单号', hint: '用于去重和统计', type: 'text' },
-        { key: 'customer_name', label: '经销商/客户', hint: '用于经销商分析', type: 'text' },
-        { key: 'region', label: '区域', hint: '用于区域分析', type: 'text' },
-        { key: 'product_name', label: '产品名称', hint: '用于产品分析', type: 'text' },
-        { key: 'product_category', label: '产品品类', hint: '用于品类分析', type: 'text' },
-        { key: 'quantity', label: '数量字段', hint: '用于销量统计', type: 'number' },
-    ];
-
-    function showConfigPanel(columns, rawRows) {
-        const grid = document.getElementById('configGrid');
-        let html = '';
-
-        for (const field of CONFIG_FIELDS) {
-            const options = columns.map(c => `<option value="${c}">${c}</option>`).join('');
-            html += `
-                <div class="config-item">
-                    <div class="config-item-label">${field.label}</div>
-                    <select class="config-select" id="config-${field.key}">
-                        <option value="">-- 不选择 --</option>
-                        ${options}
-                    </select>
-                    <div class="config-item-hint">${field.hint}</div>
-                </div>
-            `;
-        }
-
-        grid.innerHTML = html;
-        document.getElementById('configPanel').classList.add('show');
-    }
-
-    function confirmConfig() {
-        // 获取用户配置
-        userConfig = {};
-        for (const field of CONFIG_FIELDS) {
-            const select = document.getElementById(`config-${field.key}`);
-            if (select && select.value) {
-                userConfig[field.key] = select.value;
-            }
-        }
-
-        // 合并用户配置和自动映射
-        fieldMapping = {};
-        const rawColumns = Object.keys(rawData[0] || {});
-        const autoMapping = mapColumns(rawColumns);
-
-        // 用户配置优先
-        for (const [key, col] of Object.entries(userConfig)) {
-            fieldMapping[col] = key;
-        }
-
-        // 自动映射补充
-        const usedColumns = new Set(Object.keys(fieldMapping));
-        for (const [col, standard] of Object.entries(autoMapping)) {
-            if (!usedColumns.has(col)) {
-                fieldMapping[col] = standard;
-            }
-        }
-
-        document.getElementById('configPanel').classList.remove('show');
-        processData();
-    }
-
-    function skipConfig() {
-        document.getElementById('configPanel').classList.remove('show');
-        processData();
-    }
-
-    // ═══════════════════════════════════════════════════════════
-    //  数据处理
-    // ═══════════════════════════════════════════════════════════
-    function processData() {
-        const columns = Object.keys(rawData[0] || {});
-
-        // 数据清洗
-        const cleanResult = cleanRawData(rawData, fieldMapping);
-        cleanData = cleanResult.data;
-        columnTypes = detectColumnTypes(cleanData);
-        processingLogs = cleanResult.log;
-
-        // 显示状态
-        showStatus('✅', `已加载 ${cleanResult.stats.final_rows} 行数据`,
-            `匹配 ${Object.keys(fieldMapping).length} 个字段 | 清洗移除 ${cleanResult.stats.removed_rows} 行`);
-
-        // 数据质量面板
-        renderQualityPanel(cleanResult, columns.filter(c => c.trim()).length, Object.keys(fieldMapping).length);
-
-        // 处理日志
-        renderProcessingLog();
-
-        // 原始数据预览
-        renderDataPreview();
-
-        // 显示筛选器
-        document.getElementById('filters').classList.add('show');
-        document.getElementById('qualityPanel').classList.add('show');
-
-        // 加载筛选器选项
-        loadFilterOptions();
-
-        // 执行分析
-        runAnalysis();
-
-        // 重置自定义看板
-        resetDashboards();
-        document.getElementById('addDashboardBtn').classList.add('show');
-    }
-
-    function renderQualityPanel(result, totalCols, mappedCount) {
-        const grid = document.getElementById('qualityGrid');
-        const items = [];
-        items.push({ icon: '📊', text: '原始数据', detail: `${totalCols} 列 / ${result.stats.initial_rows} 行` });
-        const unmapped = totalCols - mappedCount;
-        items.push({ icon: unmapped === 0 ? '✅' : '⚠️', text: '字段匹配', detail: `${mappedCount}/${totalCols}${unmapped > 0 ? ` (${unmapped} 未匹配)` : ''}` });
-        const removed = result.stats.removed_rows;
-        items.push({ icon: removed > 0 ? '🔄' : '✅', text: '去重处理', detail: removed > 0 ? `移除 ${removed} 条 (${result.stats.removal_rate})` : '无重复' });
-        const dateInfo = result.log.find(l => l.text.startsWith('日期'));
-        if (dateInfo) {
-            const match = dateInfo.text.match(/(\d+) 条无法解析/);
-            items.push({ icon: match ? '⚠️' : '✅', text: '日期标准化', detail: match ? `${match[1]} 条异常` : '全部成功' });
-        }
-        const nullInfo = result.log.find(l => l.text.startsWith('空值'));
-        if (nullInfo) items.push({ icon: '🔧', text: '空值处理', detail: nullInfo.text.replace('空值处理: ', '') });
-        items.push({ icon: '📋', text: '有效数据', detail: `${result.stats.final_rows} 行` });
-        grid.innerHTML = items.map(item => `
-            <div class="quality-item">
-                <span class="quality-icon">${item.icon}</span>
-                <div class="quality-text">${item.text}<span>${item.detail}</span></div>
-            </div>
-        `).join('');
-    }
-
-    function renderProcessingLog() {
-        const container = document.getElementById('logContent');
-        let html = '';
-        for (const log of processingLogs) {
-            const className = log.type === 'error' ? 'error' : log.type === 'warn' ? 'warn' : 'success';
-            html += `<div class="log-item ${className}">• ${log.text}</div>`;
-        }
-        container.innerHTML = html;
-        document.getElementById('processingLog').classList.add('show');
-    }
-
-    function renderDataPreview() {
-        const table = document.getElementById('previewTable');
-        const previewData = cleanData.slice(0, 20);
-        const columns = Object.keys(previewData[0] || {});
-
-        let html = '<thead><tr>';
-        for (const col of columns) {
-            html += `<th>${col}</th>`;
-        }
-        html += '</tr></thead><tbody>';
-
-        for (const row of previewData) {
-            html += '<tr>';
-            for (const col of columns) {
-                const val = row[col];
-                html += `<td>${val instanceof Date ? val.toISOString().slice(0, 10) : val}</td>`;
-            }
-            html += '</tr>';
-        }
-        html += '</tbody>';
-
-        table.innerHTML = html;
-        document.getElementById('dataPreview').classList.add('show');
-    }
-
-    function loadFilterOptions() {
-        const dealerSel = document.getElementById('filterDealer');
-        const regionSel = document.getElementById('filterRegion');
-        dealerSel.innerHTML = '<option value="全部">全部</option>';
-        regionSel.innerHTML = '<option value="全部">全部</option>';
-
-        if (cleanData.length && 'region' in cleanData[0]) {
-            const regions = [...new Set(cleanData.map(r => r.region).filter(Boolean))].sort();
-            regions.forEach(r => regionSel.innerHTML += `<option value="${r}">${r}</option>`);
-        }
-        if (cleanData.length && 'customer_name' in cleanData[0]) {
-            const dealers = [...new Set(cleanData.map(r => r.customer_name).filter(Boolean))].sort();
-            dealers.forEach(d => dealerSel.innerHTML += `<option value="${d}">${d}</option>`);
-        }
-    }
-
-    // ═══════════════════════════════════════════════════════════
-    //  聚合引擎
-    // ═══════════════════════════════════════════════════════════
-    function groupBy(data, groupCol, valueCol, aggFn = 'sum') {
-        const groups = {};
-        for (const r of data) {
-            const key = String(r[groupCol] ?? '未知');
-            if (!groups[key]) groups[key] = [];
-            groups[key].push(r);
-        }
-        const result = [];
-        for (const [key, rows] of Object.entries(groups)) {
-            const vals = rows.map(r => parseFloat(r[valueCol]) || 0);
-            let aggVal;
-            if (aggFn === 'sum') aggVal = vals.reduce((a, b) => a + b, 0);
-            else if (aggFn === 'avg') aggVal = vals.reduce((a, b) => a + b, 0) / Math.max(vals.length, 1);
-            else if (aggFn === 'count') aggVal = rows.length;
-            result.push({ name: key, value: aggVal, count: rows.length });
-        }
-        result.sort((a, b) => b.value - a.value);
-        return result;
-    }
-
-    function filterByDate(data, range) {
-        if (!data.length || !('order_date' in data[0])) return data;
-        const maxDate = Math.max(...data.filter(r => r.order_date instanceof Date).map(r => r.order_date.getTime()));
-        const now = new Date(maxDate);
-        if (range === '7d') {
-            const cutoff = new Date(now); cutoff.setDate(cutoff.getDate() - 7);
-            return data.filter(r => !(r.order_date instanceof Date) || r.order_date >= cutoff);
-        }
-        if (range === '30d') {
-            const cutoff = new Date(now); cutoff.setDate(cutoff.getDate() - 30);
-            return data.filter(r => !(r.order_date instanceof Date) || r.order_date >= cutoff);
-        }
-        return data;
-    }
-
-    function filterByRegionDealer(data, region, dealer) {
-        let filtered = data;
-        if (region && region !== '全部') filtered = filtered.filter(r => (r.region ?? '未知') === region);
-        if (dealer && dealer !== '全部') filtered = filtered.filter(r => (r.customer_name ?? '未知') === dealer);
-        return filtered;
-    }
-
-    // ═══════════════════════════════════════════════════════════
-    //  分析引擎
-    // ═══════════════════════════════════════════════════════════
-    function analyzeTrend(data, granularity) {
-        if (!data.length || !('order_date' in data[0]) || !('sales_amount' in data[0])) return null;
-
-        if (granularity === 'auto') {
-            const dates = data.filter(r => r.order_date instanceof Date).map(r => r.order_date);
-            if (dates.length > 0) {
-                const min = new Date(Math.min(...dates.map(d => d.getTime())));
-                const max = new Date(Math.max(...dates.map(d => d.getTime())));
-                const spanDays = (max - min) / (1000 * 60 * 60 * 24);
-                if (spanDays > 180) granularity = 'month';
-                else if (spanDays > 30) granularity = 'week';
-                else granularity = 'day';
-            }
-        }
-
-        const periodMap = {};
-        for (const r of data) {
-            if (!(r.order_date instanceof Date)) continue;
-            let periodKey;
-            if (granularity === 'week') {
-                const d = new Date(r.order_date);
-                const dayOfWeek = d.getDay();
-                const diff = d.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
-                const monday = new Date(d.setDate(diff));
-                periodKey = monday.toISOString().slice(0, 10);
-            } else if (granularity === 'month') {
-                periodKey = r.order_date.toISOString().slice(0, 7);
-            } else {
-                periodKey = r.order_date.toISOString().slice(0, 10);
-            }
-            if (!periodMap[periodKey]) periodMap[periodKey] = { sales: 0, count: 0 };
-            periodMap[periodKey].sales += parseFloat(r.sales_amount) || 0;
-            periodMap[periodKey].count++;
-        }
-
-        const periods = Object.keys(periodMap).sort();
-        const sales = periods.map(p => Math.round(periodMap[p].sales));
-        const counts = periods.map(p => periodMap[p].count);
-
-        const mom = sales.map((s, i) => i === 0 ? null : ((s - sales[i-1]) / Math.max(sales[i-1], 1) * 100));
-
-        const anomalies = [];
-        let zeroStreak = 0;
-
-        periods.forEach((p, i) => {
-            if (mom[i] != null && mom[i] < -30) {
-                anomalies.push({
-                    date: p, sales: sales[i], rate: Math.round(mom[i] * 10) / 10,
-                    direction: 'down', region: '', reason: '下降超30%'
-                });
-            }
-
-            if (sales[i] === 0) {
-                zeroStreak++;
-                if (zeroStreak >= 3) {
-                    anomalies.push({
-                        date: p, sales: 0, rate: -100, direction: 'down',
-                        region: '', reason: '连续3天零收入'
-                    });
-                }
-            } else {
-                zeroStreak = 0;
-            }
-        });
-
-        const totalSales = sales.reduce((a, b) => a + b, 0);
-        const totalRecords = counts.reduce((a, b) => a + b, 0);
-        const latestMom = mom.filter(m => m !== null).pop() || 0;
-        const days = periods.length || 1;
-
-        return {
-            granularity,
-            chart: { periods, sales, counts, mom: mom.map(m => m == null ? null : Math.round(m * 10) / 10) },
-            anomalies,
-            summary: {
-                total_sales: totalSales,
-                total_records: totalRecords,
-                avg_order: Math.round(totalSales / Math.max(totalRecords, 1)),
-                latest_mom: Math.round(latestMom * 10) / 10,
-                period_count: periods.length,
-                daily_avg: Math.round(totalSales / Math.max(days, 1)),
-            }
-        };
-    }
-
-    function analyzeDealer(data) {
-        if (!data.length || !('customer_name' in data[0]) || !('sales_amount' in data[0])) return null;
-
-        const seen = new Set();
-        const dedupedData = data.filter(r => {
-            const dateVal = r.order_date instanceof Date ? r.order_date.toISOString().slice(0, 10) : String(r.order_date ?? '');
-            const idVal = String(r.order_id ?? '');
-            const key = `${dateVal}|${idVal}`;
-            if (seen.has(key)) return false;
-            seen.add(key);
-            return true;
-        });
-
-        const groups = {};
-        for (const r of dedupedData) {
-            const name = r.customer_name ?? '未知';
-            if (!groups[name]) groups[name] = { sales: 0, orders: new Set() };
-            groups[name].sales += parseFloat(r.sales_amount) || 0;
-            groups[name].orders.add(r.order_id);
-        }
-
-        const dealers = Object.entries(groups)
-            .map(([name, d]) => ({ name, sales: Math.round(d.sales), orders: d.orders.size }))
-            .sort((a, b) => b.sales - a.sales);
-
-        const totalSales = dealers.reduce((a, d) => a + d.sales, 0);
-        const totalDealers = dealers.length;
-
-        let cumSum = 0;
-        dealers.forEach(d => {
-            cumSum += d.sales;
-            d.cum_pct = Math.round(cumSum / Math.max(totalSales, 1) * 1000) / 10;
-            d.pct = Math.round(d.sales / Math.max(totalSales, 1) * 1000) / 10;
-        });
-
-        const crN = 10;
-        const crSales = dealers.slice(0, crN).reduce((a, d) => a + d.sales, 0);
-        const crRate = Math.round(crSales / Math.max(totalSales, 1) * 1000) / 10;
-
-        const headCount = Math.max(1, Math.floor(totalDealers * 0.2));
-        dealers.forEach((d, i) => {
-            if (i < headCount) d.tier = '头部';
-            else if (d.cum_pct <= 80) d.tier = '腰部';
-            else d.tier = '尾部';
-        });
-
-        let silentShort = 0, silentLong = 0;
-        if ('order_date' in data[0]) {
-            const maxDate = Math.max(...data.filter(r => r.order_date instanceof Date).map(r => r.order_date.getTime()));
-            const lastOrderMap = {};
-            for (const r of data) {
-                if (r.order_date instanceof Date) {
-                    const name = r.customer_name ?? '未知';
-                    if (!lastOrderMap[name] || r.order_date.getTime() > lastOrderMap[name]) {
-                        lastOrderMap[name] = r.order_date.getTime();
-                    }
-                }
-            }
-            for (const d of dealers) {
-                const days = lastOrderMap[d.name] ? (maxDate - lastOrderMap[d.name]) / (1000*60*60*24) : 999;
-                if (days >= 60) silentLong++;
-                else if (days >= 30) silentShort++;
-            }
-        }
-
-        return {
-            chart: {
-                names: dealers.slice(0, 10).map(d => d.name),
-                sales: dealers.slice(0, 10).map(d => d.sales),
-                cum_pct: dealers.slice(0, 10).map(d => d.cum_pct),
-            },
-            summary: {
-                total_sales: totalSales,
-                total_dealers: totalDealers,
-                cr_n: crN,
-                cr_rate: crRate,
-                head_count: headCount,
-                silent_short: silentShort,
-                silent_long: silentLong,
-            },
-            top: dealers.slice(0, 20),
-        };
-    }
-
-    function analyzeRegion(data) {
-        if (!data.length || !('region' in data[0]) || !('sales_amount' in data[0])) return null;
-
-        const seen = new Set();
-        const dedupedData = data.filter(r => {
-            const dateVal = r.order_date instanceof Date ? r.order_date.toISOString().slice(0, 10) : String(r.order_date ?? '');
-            const idVal = String(r.order_id ?? '');
-            const key = `${dateVal}|${idVal}`;
-            if (seen.has(key)) return false;
-            seen.add(key);
-            return true;
-        });
-
-        const groups = {};
-        for (const r of dedupedData) {
-            const name = r.region ?? '未知';
-            if (!groups[name]) groups[name] = { sales: 0, orders: new Set(), dealers: new Set() };
-            groups[name].sales += parseFloat(r.sales_amount) || 0;
-            groups[name].orders.add(r.order_id);
-            groups[name].dealers.add(r.customer_name ?? '未知');
-        }
-
-        const regions = Object.entries(groups)
-            .map(([name, g]) => ({ name, sales: Math.round(g.sales), orders: g.orders.size, dealers: g.dealers.size }))
-            .sort((a, b) => b.sales - a.sales);
-
-        const totalSales = regions.reduce((a, r) => a + r.sales, 0);
-        regions.forEach(r => { r.pct = Math.round(r.sales / Math.max(totalSales, 1) * 1000) / 10; });
-
-        return {
-            chart: {
-                names: regions.map(r => r.name),
-                sales: regions.map(r => r.sales),
-                pct: regions.map(r => r.pct),
-            },
-            data: regions,
-        };
-    }
-
-    function analyzeProduct(data) {
-        if (!data.length) return null;
-        const result = {};
-
-        const seen = new Set();
-        const dedupedData = data.filter(r => {
-            const dateVal = r.order_date instanceof Date ? r.order_date.toISOString().slice(0, 10) : String(r.order_date ?? '');
-            const idVal = String(r.order_id ?? '');
-            const key = `${dateVal}|${idVal}`;
-            if (seen.has(key)) return false;
-            seen.add(key);
-            return true;
-        });
-
-        if ('product_category' in data[0]) {
-            const groups = {};
-            for (const r of dedupedData) {
-                const name = r.product_category ?? '未知';
-                if (!groups[name]) groups[name] = { sales: 0, qty: 0, orders: new Set() };
-                groups[name].sales += parseFloat(r.sales_amount) || 0;
-                groups[name].qty += parseFloat(r.quantity) || 0;
-                groups[name].orders.add(r.order_id);
-            }
-            const cats = Object.entries(groups)
-                .map(([name, g]) => ({ name, sales: Math.round(g.sales), qty: g.qty, orders: g.orders.size }))
-                .sort((a, b) => b.sales - a.sales);
-            const totalSales = cats.reduce((a, c) => a + c.sales, 0);
-            let cumSum = 0;
-            cats.forEach(c => {
-                c.pct = Math.round(c.sales / Math.max(totalSales, 1) * 1000) / 10;
-                cumSum += c.sales;
-                c.cum_pct = Math.round(cumSum / Math.max(totalSales, 1) * 1000) / 10;
-                c.abc_class = c.cum_pct <= 70 ? 'A' : (c.cum_pct <= 90 ? 'B' : 'C');
-            });
-            result.category = {
-                chart: { names: cats.map(c => c.name), sales: cats.map(c => c.sales), pct: cats.map(c => c.pct) },
-                data: cats,
-            };
-        }
-
-        return result;
-    }
-
-    function analyzeActivity(data) {
-        if (!data.length || !('customer_name' in data[0]) || !('order_date' in data[0])) return null;
-
-        const maxDate = Math.max(...data.filter(r => r.order_date instanceof Date).map(r => r.order_date.getTime()));
-        const dealerMap = {};
-        for (const r of data) {
-            const name = r.customer_name ?? '未知';
-            if (!dealerMap[name]) dealerMap[name] = { sales: 0, orders: 0, lastDate: null };
-            dealerMap[name].sales += parseFloat(r.sales_amount) || 0;
-            dealerMap[name].orders++;
-            if (r.order_date instanceof Date) {
-                if (!dealerMap[name].lastDate || r.order_date.getTime() > dealerMap[name].lastDate) {
-                    dealerMap[name].lastDate = r.order_date.getTime();
-                }
-            }
-        }
-
-        const points = Object.entries(dealerMap).map(([name, d]) => ({
-            name,
-            sales: Math.round(d.sales),
-            days: d.lastDate ? Math.round((maxDate - d.lastDate) / (1000*60*60*24)) : 999,
-            orders: d.orders,
-        }));
-
-        const riskCount = points.filter(p => p.days > 60).length;
-        const warnCount = points.filter(p => p.days > 30 && p.days <= 60).length;
-
-        return {
-            chart: { points, riskCount, warnCount },
-        };
-    }
-
-    // ═══════════════════════════════════════════════════════════
-    //  自定义看板聚合
-    // ═══════════════════════════════════════════════════════════
-    function aggregateDashboard(data, config) {
-        const { dimension, metric, aggFn, dateRange } = config;
-        if (!dimension || !metric) return null;
-
-        let filtered = data;
-        if (dateRange) filtered = filterByDate(filtered, dateRange);
-
-        const result = groupBy(filtered, dimension, metric, aggFn);
-        return result;
-    }
-
-    function recommendChartType(dimension, data) {
-        if (!dimension || !data.length) return 'bar';
-        const uniqueValues = new Set(data.map(r => r[dimension])).size;
-        if (dimension === 'order_date' || uniqueValues > 20) return 'line';
-        if (uniqueValues <= 10) return 'pie';
-        return 'bar';
-    }
-
-    // ═══════════════════════════════════════════════════════════
-    //  文件处理
-    // ═══════════════════════════════════════════════════════════
-    const uploadArea = document.getElementById('uploadArea');
-    const fileInput = document.getElementById('fileInput');
-    uploadArea.addEventListener('click', () => fileInput.click());
-    uploadArea.addEventListener('dragover', (e) => { e.preventDefault(); uploadArea.classList.add('dragover'); });
-    uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('dragover'));
-    uploadArea.addEventListener('drop', (e) => {
-        e.preventDefault(); uploadArea.classList.remove('dragover');
-        if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
-    });
-    fileInput.addEventListener('change', () => { if (fileInput.files.length) handleFile(fileInput.files[0]); });
-
-    function handleFile(file) {
-        showStatus('⏳', `正在处理: ${file.name}`, '解析文件中...');
-        document.getElementById('navFilename').textContent = file.name;
-        currentGranularity = 'auto';
-        document.querySelectorAll('.granularity-btn').forEach(btn => {
-            btn.classList.toggle('active', btn.dataset.gran === 'auto');
-        });
-
-        const ext = file.name.split('.').pop().toLowerCase();
-
-        if (ext === 'csv') {
-            Papa.parse(file, {
-                header: true,
-                skipEmptyLines: true,
-                complete: function(results) {
-                    rawData = results.data;
-                    processFile(results.data, results.meta.fields);
-                },
-                error: function(err) {
-                    showStatus('❌', 'CSV 解析失败', err.message);
-                }
-            });
-        } else if (ext === 'xlsx' || ext === 'xls') {
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                try {
-                    const wb = XLSX.read(e.target.result, { type: 'array' });
-                    const ws = wb.Sheets[wb.SheetNames[0]];
-                    const data = XLSX.utils.sheet_to_json(ws, { defval: '' });
-                    if (data.length === 0) {
-                        showStatus('❌', '文件为空', '没有找到数据行');
-                        return;
-                    }
-                    rawData = data;
-                    processFile(data, Object.keys(data[0]));
-                } catch (err) {
-                    showStatus('❌', 'Excel 解析失败', err.message);
-                }
-            };
-            reader.readAsArrayBuffer(file);
-        } else {
-            showStatus('❌', '不支持的文件格式', '请上传 CSV 或 Excel 文件');
-        }
-    }
-
-    function processFile(rows, columns) {
-        showStatus('⏳', `正在清洗数据...`, `${columns.length} 列，${rows.length} 行`);
-
-        // 字段映射
-        fieldMapping = mapColumns(columns);
-        const mappedCount = Object.keys(fieldMapping).length;
-
-        // 显示配置面板
-        showConfigPanel(columns, rows);
-    }
-
-    // ═══════════════════════════════════════════════════════════
-    //  主分析流程
-    // ═══════════════════════════════════════════════════════════
-    function runAnalysis() {
-        const region = document.getElementById('filterRegion').value;
-        const dealer = document.getElementById('filterDealer').value;
-        const filtered = filterByRegionDealer(cleanData, region, dealer);
-
-        if (filtered.length === 0) {
-            hideAll();
-            document.getElementById('insights').classList.add('show');
-            document.getElementById('insightsContent').innerHTML = '<div class="insight-item">⚠️ 筛选后无数据，请调整筛选条件</div>';
-            return;
-        }
-
-        // 执行各项分析
-        const trend = analyzeTrend(filtered, currentGranularity);
-        const dealerAnalysis = analyzeDealer(filtered);
-        const regionAnalysis = analyzeRegion(filtered);
-        const productAnalysis = analyzeProduct(filtered);
-        const activityAnalysis = analyzeActivity(filtered);
-
-        const analysisData = {
-            summary: { total_sales: trend?.summary?.total_sales || 0, total_orders: trend?.summary?.total_records || 0 },
-            trend, dealer: dealerAnalysis, region: regionAnalysis, product: productAnalysis, activity: activityAnalysis,
-        };
-
-        // 渲染
-        renderDashboard(analysisData);
-    }
-
-    function applyFilters() { runAnalysis(); }
-
-    function setGranularity(gran) {
-        currentGranularity = gran;
-        document.querySelectorAll('.granularity-btn').forEach(btn => {
-            btn.classList.toggle('active', btn.dataset.gran === gran);
-        });
-        if (cleanData.length) runAnalysis();
-    }
-
-    // ═══════════════════════════════════════════════════════════
-    //  渲染仪表盘
-    // ═══════════════════════════════════════════════════════════
-    function renderDashboard(data) {
-        document.getElementById('chartsGrid').classList.add('show');
-        document.getElementById('insights').classList.add('show');
-        document.getElementById('layerKpiTitle').style.display = 'block';
-        document.getElementById('layerChartTitle').style.display = 'block';
-
-        renderKPI(data);
-        renderAlerts(data);
-        renderInsights(data);
-
-        // 动态生成图表
-        requestAnimationFrame(() => {
-            initCharts();
-            renderDynamicCharts(data);
-        });
-    }
-
-    function initCharts() {
-        if (chartsInitialized) return;
-        chartsInitialized = true;
-    }
-
-    function renderDynamicCharts(data) {
-        const grid = document.getElementById('chartsGrid');
-        grid.innerHTML = '';
-
-        // 趋势图（时间 + 数值）
-        if (data.trend?.chart) {
-            const card = createChartCard('趋势图', 'chartTrend', true);
-            grid.appendChild(card);
-            renderTrendChart(data.trend);
-        }
-
-        // 经销商帕累托（类别 + 数值）
-        if (data.dealer?.chart) {
-            const card = createChartCard('经销商贡献', 'chartDealer');
-            grid.appendChild(card);
-            renderDealerChart(data.dealer);
-        }
-
-        // 区域分布（类别 + 数值）
-        if (data.region?.chart) {
-            const card = createChartCard('区域销售分布', 'chartRegion');
-            grid.appendChild(card);
-            renderRegionChart(data.region);
-        }
-
-        // 品类饼图（类别 + 数值）
-        if (data.product?.category) {
-            const card = createChartCard('产品/品类表现', 'chartProduct');
-            grid.appendChild(card);
-            renderProductChart(data.product);
-        }
-
-        // 经销商活跃度（多数值）
-        if (data.activity?.chart) {
-            const card = createChartCard('经销商活跃度', 'chartActivity');
-            grid.appendChild(card);
-            renderActivityChart(data.activity);
-        }
-    }
-
-    function createChartCard(title, containerId, isFull = false) {
-        const card = document.createElement('div');
-        card.className = `chart-card${isFull ? ' full' : ''}`;
-        card.innerHTML = `
-            <div class="chart-header">
-                <span class="chart-title">${title}</span>
-                <button class="chart-export-btn" onclick="exportChart('${containerId}')">导出 ↓</button>
-            </div>
-            <div id="${containerId}" class="chart-container${isFull ? ' tall' : ''}"></div>
-            <div class="chart-metric" id="metric${containerId.replace('chart', '')}"></div>
-        `;
-        return card;
-    }
-
-    function renderKPI(data) {
-        const row = document.getElementById('kpiRow');
-        const s = data.summary || {};
-        const trend = data.trend || {};
-        const dealer = data.dealer || {};
-
-        const isDeviceMode = !dealer.summary || dealer.summary.total_dealers === 0;
-        const entityLabel = isDeviceMode ? '设备' : '经销商';
-        const entityCount = isDeviceMode
-            ? (cleanData.length > 0 ? [...new Set(cleanData.map(r => r.order_id ?? r.customer_name).filter(Boolean))].length : 0)
-            : (dealer.summary?.total_dealers || 0);
-
-        const totalSales = s.total_sales || trend.summary?.total_sales || 0;
-        const totalRecords = s.total_orders || trend.summary?.total_records || 0;
-        const dailyAvg = trend.summary?.daily_avg || 0;
-        const avgOrder = trend.summary?.avg_order || 0;
-        const latestMom = trend.summary?.latest_mom || 0;
-
-        const kpis = [
-            { label: '总销售额', value: totalSales.toLocaleString(), unit: '元', color: '', sub: `日均 ${dailyAvg.toLocaleString()} 元 | 环比 ${latestMom >= 0 ? '+' : ''}${latestMom}%` },
-            { label: '记录数', value: totalRecords.toLocaleString(), unit: '条', color: 'green', sub: `${entityCount} 个${entityLabel}` },
-            { label: '单机/单均营收', value: avgOrder.toLocaleString(), unit: '元', color: 'blue', sub: isDeviceMode ? '按记录平均' : '按订单平均' },
-            { label: '环比变化', value: `${latestMom >= 0 ? '+' : ''}${latestMom}%`, unit: '', color: latestMom >= 0 ? 'green' : 'red', sub: '最近一期' },
-            { label: '头部集中度', value: `${dealer.summary?.cr_rate || 0}%`, unit: '', color: (dealer.summary?.cr_rate || 0) > 70 ? 'orange' : '', sub: `CR${dealer.summary?.cr_n || 10}` },
-            { label: '静默客户', value: `${(dealer.summary?.silent_long || 0) + (dealer.summary?.silent_short || 0)}`, unit: '个', color: ((dealer.summary?.silent_long || 0) + (dealer.summary?.silent_short || 0)) > 5 ? 'red' : 'purple', sub: `${dealer.summary?.silent_long || 0} 个超60天` },
+</div>
+
+<script>
+const { createApp, ref, reactive, computed, watch, onMounted, nextTick } = Vue;
+
+createApp({
+    setup() {
+        // ─── 状态 ───────────────────────────────────────
+        const username = ref('');
+        const filename = ref('');
+        const dragover = ref(false);
+        const uploadStatus = ref('');
+        const statusMessage = ref('');
+        const columns = ref([]);
+        const preview = ref([]);
+        const autoMapping = ref({});
+        const columnSuggestions = ref({});
+        const processing = ref(false);
+
+        // 标准字段
+        const standardFields = [
+            { name: 'sales_date', display_name: '销售日期', required: true },
+            { name: 'revenue', display_name: '销售额', required: true },
+            { name: 'order_id', display_name: '订单号', required: true },
+            { name: 'quantity', display_name: '销量', required: false },
+            { name: 'sales_target', display_name: '销售目标', required: false },
+            { name: 'region', display_name: '区域', required: false },
+            { name: 'category', display_name: '产品类别', required: false },
+            { name: 'sales_rep', display_name: '销售人员', required: false },
+            { name: 'customer_name', display_name: '客户名称', required: false },
         ];
 
-        row.innerHTML = kpis.map(k => `
-            <div class="kpi-card ${k.color}">
-                <div class="kpi-label">${k.label}</div>
-                <div class="kpi-value">${k.value}${k.unit ? '<span style="font-size:13px;font-weight:400;color:#6B7280;margin-left:4px">' + k.unit + '</span>' : ''}</div>
-                <div class="kpi-sub">${k.sub}</div>
-            </div>
-        `).join('');
-        row.classList.add('show');
-    }
+        const fieldMapping = reactive({});
+        const analysisData = ref(null);
+        const filterOptions = ref({});
+        const activeFilters = reactive({});
+        const granularity = ref('auto');
+        const chartInstances = ref({});
 
-    function renderTrendChart(data) {
-        const t = data.chart;
-        const container = document.getElementById('chartTrend');
-        if (!container) return;
+        const fieldNames = {
+            region: '区域', category: '品类', sales_rep: '销售人员', customer_name: '客户'
+        };
 
-        const chart = echarts.init(container, null, { renderer: 'canvas' });
-        charts.chartTrend = chart;
-
-        const axisLabel = { interval: 'auto', rotate: 45, hideOverlap: true, fontSize: 12, color: '#374151' };
-        const grid = { top: 40, right: 30, bottom: 80, left: 60 };
-        const tooltip = { trigger: 'axis', backgroundColor: '#1A1D21', textStyle: { color: '#FFF' } };
-
-        chart.setOption({
-            grid, color: colorPalette,
-            legend: {
-                data: ['销售额', '记录数'],
-                right: 10, top: 2,
-                textStyle: { fontSize: 11, color: '#374151' },
-                selected: { '销售额': true, '记录数': true },
-            },
-            tooltip,
-            xAxis: { type: 'category', data: t.periods, axisLine: { lineStyle: { color: '#D1D5DB' } }, axisLabel, axisTick: { show: false } },
-            yAxis: [
-                { type: 'value', name: '销售额', splitLine: { lineStyle: { color: '#F0F2F5' } }, axisLabel: { fontSize: 11, color: '#374151' }, nameTextStyle: { color: '#6B7280' }, scale: true },
-                { type: 'value', name: '记录数', splitLine: { show: false }, axisLabel: { fontSize: 11, color: '#374151' }, nameTextStyle: { color: '#6B7280' }, scale: true }
-            ],
-            series: [
-                { name: '销售额', type: 'line', data: t.sales, smooth: true, areaStyle: { opacity: 0.12 }, symbol: 'circle', symbolSize: 5 },
-                { name: '记录数', type: 'bar', data: t.counts, barWidth: '30%', yAxisIndex: 1, itemStyle: { opacity: 0.35 } }
-            ],
+        // ─── 计算属性 ───────────────────────────────────────
+        const missingRequired = computed(() => {
+            const required = ['sales_date', 'revenue', 'order_id'];
+            return required.filter(f => !fieldMapping[f]);
         });
-        chart.resize();
 
-        const summary = data.summary;
-        const cls = summary.latest_mom >= 0 ? 'up' : 'down';
-        const arr = summary.latest_mom >= 0 ? '↑' : '↓';
-        document.getElementById('metricTrend').innerHTML =
-            `总销售额 <b>${summary.total_sales.toLocaleString()}</b> 元 | 记录 <b>${summary.total_records}</b> 条 | 日均 <b>${summary.daily_avg.toLocaleString()}</b> 元 | 最近一期 <span class="${cls}">${arr} ${Math.abs(summary.latest_mom)}%</span>`;
-    }
-
-    function renderDealerChart(data) {
-        const d = data.chart;
-        const container = document.getElementById('chartDealer');
-        if (!container) return;
-
-        const chart = echarts.init(container, null, { renderer: 'canvas' });
-        charts.chartDealer = chart;
-
-        const axisLabel = { interval: 'auto', rotate: 45, hideOverlap: true, fontSize: 12, color: '#374151' };
-        const grid = { top: 40, right: 30, bottom: 80, left: 60 };
-        const tooltip = { trigger: 'axis', backgroundColor: '#1A1D21', textStyle: { color: '#FFF' } };
-
-        chart.setOption({
-            grid, color: colorPalette,
-            legend: { data: ['销售额', '累计占比'], right: 10, top: 2, textStyle: { fontSize: 11, color: '#374151' } },
-            tooltip,
-            xAxis: { type: 'category', data: d.names, axisLine: { lineStyle: { color: '#D1D5DB' } }, axisLabel, axisTick: { show: false } },
-            yAxis: [
-                { type: 'value', name: '销售额', splitLine: { lineStyle: { color: '#F0F2F5' } }, axisLabel: { fontSize: 11, color: '#374151' }, nameTextStyle: { color: '#6B7280' } },
-                { type: 'value', name: '累计%', max: 100, splitLine: { show: false }, axisLabel: { fontSize: 11, color: '#374151' }, nameTextStyle: { color: '#6B7280' } }
-            ],
-            series: [
-                { name: '销售额', type: 'bar', data: d.sales, barWidth: '45%' },
-                { name: '累计占比', type: 'line', data: d.cum_pct, yAxisIndex: 1, smooth: true, symbol: 'circle', symbolSize: 4 }
-            ],
+        const canProcess = computed(() => {
+            return missingRequired.value.length === 0;
         });
-        chart.resize();
 
-        const ds = data.summary;
-        document.getElementById('metricDealer').innerHTML =
-            `CR${ds.cr_n} <b>${ds.cr_rate}%</b> | 共 <b>${ds.total_dealers}</b> 家经销商`;
-    }
+        const chartConfigs = computed(() => {
+            if (!analysisData.value) return [];
+            const d = analysisData.value;
+            const charts = [];
 
-    function renderRegionChart(data) {
-        const r = data.chart;
-        const container = document.getElementById('chartRegion');
-        if (!container) return;
+            if (d.trend) {
+                charts.push({ id: 'chart-trend', title: '📈 销售趋势', data: 'trend' });
+            }
+            if (d.kpi && d.kpi.rep_kpi) {
+                charts.push({ id: 'chart-kpi', title: '🎯 KPI 达成排行', data: 'kpi' });
+            }
+            if (d.region) {
+                charts.push({ id: 'chart-region', title: '🗺️ 区域业绩分布', data: 'region' });
+            }
+            if (d.ranking) {
+                charts.push({ id: 'chart-ranking', title: '🏆 销售排行榜', data: 'ranking' });
+            }
+            if (d.dealer) {
+                charts.push({ id: 'chart-dealer', title: '👥 客户贡献度', data: 'dealer' });
+            }
+            if (d.product) {
+                charts.push({ id: 'chart-product', title: '📦 品类表现', data: 'product' });
+            }
+            if (d.order_value) {
+                charts.push({ id: 'chart-order-value', title: '💰 客单价分布', data: 'order_value' });
+            }
+            if (d.heatmap) {
+                charts.push({ id: 'chart-heatmap', title: '🔥 月度热力图', data: 'heatmap' });
+            }
 
-        const chart = echarts.init(container, null, { renderer: 'canvas' });
-        charts.chartRegion = chart;
-
-        chart.setOption({
-            grid: { top: 20, right: 30, bottom: 30, left: 80 },
-            color: colorPalette,
-            tooltip: { trigger: 'axis', backgroundColor: '#1A1D21', textStyle: { color: '#FFF' } },
-            xAxis: { type: 'value', name: '销售额', splitLine: { lineStyle: { color: '#F0F2F5' } }, axisLabel: { fontSize: 11, color: '#374151' }, nameTextStyle: { color: '#6B7280' } },
-            yAxis: { type: 'category', data: r.names.slice().reverse(), axisLine: { lineStyle: { color: '#D1D5DB' } }, axisTick: { show: false }, axisLabel: { fontSize: 11, color: '#374151' } },
-            series: [{ type: 'bar', data: r.sales.slice().reverse(), barWidth: '50%', itemStyle: { borderRadius: [0, 4, 4, 0] } }],
+            return charts;
         });
-        chart.resize();
-        document.getElementById('metricRegion').innerHTML = `共 <b>${r.names.length}</b> 个区域`;
-    }
 
-    function renderProductChart(data) {
-        const pc = data.category.chart;
-        const container = document.getElementById('chartProduct');
-        if (!container) return;
-
-        const chart = echarts.init(container, null, { renderer: 'canvas' });
-        charts.chartProduct = chart;
-
-        chart.setOption({
-            tooltip: { trigger: 'item', backgroundColor: '#1A1D21', textStyle: { color: '#FFF' } },
-            color: colorPalette,
-            series: [{
-                type: 'pie', center: ['50%', '55%'], radius: ['35%', '65%'],
-                avoidLabelOverlap: true,
-                label: { show: true, formatter: '{b}\n{d}%', fontSize: 11, color: '#374151' },
-                labelLine: { length: 12, length2: 10, lineStyle: { color: '#6B7280' } },
-                data: pc.names.map((n, i) => ({ name: n, value: pc.pct[i] })),
-            }],
-        });
-        chart.resize();
-        if (data.category.data?.length) {
-            const top = data.category.data[0];
-            document.getElementById('metricProduct').innerHTML =
-                `TOP 品类 <b>${top.name}</b> 占比 <b>${top.pct}%</b> | 共 ${data.category.data.length} 个品类`;
+        // ─── 方法 ───────────────────────────────────────
+        async function handleFileSelect(e) {
+            const file = e.target.files[0];
+            if (file) await uploadFile(file);
         }
-    }
 
-    function renderActivityChart(data) {
-        const a = data.chart;
-        const container = document.getElementById('chartActivity');
-        if (!container) return;
+        async function handleDrop(e) {
+            dragover.value = false;
+            const file = e.dataTransfer.files[0];
+            if (file) await uploadFile(file);
+        }
 
-        const chart = echarts.init(container, null, { renderer: 'canvas' });
-        charts.chartActivity = chart;
+        async function uploadFile(file) {
+            uploadStatus.value = 'loading';
+            statusMessage.value = '正在上传并识别字段...';
 
-        chart.setOption({
-            grid: { top: 20, right: 20, bottom: 50, left: 55 },
-            color: colorPalette,
-            tooltip: {
-                backgroundColor: '#1A1D21', textStyle: { color: '#FFF' },
-                formatter: function(params) {
-                    const d = params.data;
-                    return `<b>${d[3]}</b><br/>销售额: ${d[0].toLocaleString()}<br/>距上次进货: ${d[1]} 天`;
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const res = await fetch('/api/upload', { method: 'POST', body: formData });
+                const data = await res.json();
+
+                if (!res.ok || !data.success) {
+                    throw new Error(data.detail || '上传失败');
                 }
-            },
-            xAxis: { name: '销售额', splitLine: { lineStyle: { color: '#F0F2F5' } }, axisLabel: { fontSize: 11, color: '#374151' }, nameTextStyle: { color: '#6B7280' } },
-            yAxis: { name: '距上次进货(天)', splitLine: { lineStyle: { color: '#F0F2F5' } }, axisLabel: { fontSize: 11, color: '#374151' }, nameTextStyle: { color: '#6B7280' } },
-            series: [{
-                type: 'scatter',
-                data: a.points.map(p => [p.sales, p.days, p.orders, p.name]),
-                symbolSize: function(val) { return Math.max(8, Math.min(25, val[2] * 2)); },
-                itemStyle: {
-                    color: function(params) {
-                        const d = params.data;
-                        if (d[1] > 60) return '#EF4444';
-                        if (d[1] > 30) return '#F59E0B';
-                        return '#3B82F6';
-                    },
-                    opacity: 0.7,
-                },
-            }],
-        });
-        chart.resize();
-        document.getElementById('metricActivity').innerHTML =
-            `⚠️ 高风险 <span style="color:#EF4444">${a.riskCount || 0}</span> 家 | ⏳ 关注 <span style="color:#F59E0B">${a.warnCount || 0}</span> 家`;
-    }
 
-    function renderAlerts(data) {
-        const section = document.getElementById('alertSection');
-        const grid = document.getElementById('alertGrid');
-        const html = [];
+                filename.value = data.filename;
+                columns.value = data.columns;
+                preview.value = data.preview || [];
+                autoMapping.value = data.auto_mapping || {};
+                columnSuggestions.value = data.column_suggestions || {};
 
-        if (data.dealer?.top?.length) {
-            const declining = data.dealer.top.filter(d => d.tier === '尾部').slice(0, 5);
-            if (declining.length) {
-                html.push(`<div class="alert-block"><h4 class="red">🔻 业绩下滑预警</h4>${declining.map(d => `<div class="alert-item"><span>${d.name}</span><span class="alert-val down">${d.sales.toLocaleString()}</span></div>`).join('')}</div>`);
+                // 应用自动映射
+                Object.keys(autoMapping.value).forEach(std => {
+                    fieldMapping[std] = autoMapping.value[std];
+                });
+
+                uploadStatus.value = 'success';
+                statusMessage.value = `文件 "${data.filename}" 已上传，共 ${data.rows} 行数据`;
+            } catch (err) {
+                uploadStatus.value = 'error';
+                statusMessage.value = err.message;
             }
         }
 
-        if (data.dealer?.summary?.silent_long > 0 || data.dealer?.summary?.silent_short > 0) {
-            const ds = data.dealer.summary;
-            html.push(`<div class="alert-block"><h4 class="orange">⏳ 静默客户预警</h4><div class="alert-item"><span>60 天未进货</span><span class="alert-val warn">${ds.silent_long} 家</span></div><div class="alert-item"><span>30天未进货</span><span class="alert-val warn">${ds.silent_short} 家</span></div></div>`);
+        function onMappingChange() {
+            // 映射变化时不做额外操作，用户点击"开始分析"才处理
         }
 
-        if (data.trend?.anomalies?.length) {
-            const anomalies = data.trend.anomalies.slice(0, 8);
-            html.push(`<div class="alert-block"><h4 class="blue">⚡ 异常波动记录</h4>${anomalies.map(a => {
-                const regionStr = a.region ? ` | ${a.region}` : '';
-                const reasonStr = a.reason ? ` (${a.reason})` : '';
-                return `<div class="alert-item"><span>${a.date}${regionStr}${reasonStr}</span><span class="alert-val ${a.direction === 'up' ? 'up' : 'down'}">${a.direction === 'up' ? '↑' : '↓'} ${Math.abs(a.rate)}%</span></div>`;
-            }).join('')}</div>`);
+        function resetMapping() {
+            Object.keys(fieldMapping).forEach(k => { fieldMapping[k] = ''; });
+            // 重新应用自动映射
+            Object.keys(autoMapping.value).forEach(std => {
+                fieldMapping[std] = autoMapping.value[std];
+            });
         }
 
-        if (html.length) {
-            grid.innerHTML = html.join('');
-            section.classList.add('show');
-        } else {
-            section.classList.remove('show');
-        }
-    }
+        async function processData() {
+            if (!canProcess.value) return;
+            processing.value = true;
+            statusMessage.value = '正在处理数据...';
+            uploadStatus.value = 'loading';
 
-    function renderInsights(data) {
-        const all = [];
-        if (data.trend?.summary) {
-            const s = data.trend.summary;
-            all.push(`📊 数据跨度 ${s.period_count} 个周期，总销售额 ${s.total_sales.toLocaleString()} 元，共 ${s.total_records} 条记录，平均 ${s.avg_order.toLocaleString()} 元/条`);
-            if (s.latest_mom !== 0) all.push(`📈 最近一期环比 ${s.latest_mom > 0 ? '增长' : '下降'} ${Math.abs(s.latest_mom)}%`);
-        }
-        if (data.dealer?.summary && data.dealer.summary.total_dealers > 0) {
-            const ds = data.dealer.summary;
-            all.push(`🏢 共 ${ds.total_dealers} 家经销商，CR${ds.cr_n} 集中度 ${ds.cr_rate}%`);
-        }
-        if (data.product?.category?.data?.length) {
-            const top = data.product.category.data[0];
-            all.push(`📦 TOP 品类 ${top.name} 占比 ${top.pct}%，共 ${data.product.category.data.length} 个品类`);
-        }
-        if (data.region?.data?.length) {
-            const top = data.region.data[0];
-            all.push(`🗺️ ${top.name} 区域占比最高（${top.pct}%），共 ${data.region.data.length} 个区域`);
-        }
-        document.getElementById('insightsContent').innerHTML = all.map(i => `<div class="insight-item">• ${i}</div>`).join('');
-    }
+            const formData = new FormData();
+            formData.append('mapping_config', JSON.stringify(fieldMapping));
+            formData.append('granularity', granularity.value);
+            formData.append('filters', JSON.stringify(activeFilters));
 
-    // ═══════════════════════════════════════════════════════════
-    //  自定义看板
-    // ═══════════════════════════════════════════════════════════
-    function resetDashboards() {
-        dashboards = [];
-        dashboardCounter = 0;
-        document.getElementById('customDashboards').innerHTML = '';
-        document.getElementById('customDashboards').classList.remove('show');
-        document.getElementById('addDashboardBtn').classList.remove('show');
-        document.getElementById('layerCustomTitle').style.display = 'none';
-    }
+            try {
+                const res = await fetch('/api/process', { method: 'POST', body: formData });
+                const data = await res.json();
 
-    function addDashboard() {
-        dashboardCounter++;
-        const id = dashboardCounter;
-        const config = { id, dimension: '', metric: '', aggFn: 'sum', chartType: 'bar', dateRange: null };
-        dashboards.push(config);
-        renderDashboardCard(config);
-        document.getElementById('customDashboards').classList.add('show');
-        document.getElementById('addDashboardBtn').classList.add('show');
-        document.getElementById('layerCustomTitle').style.display = 'block';
-    }
+                if (!res.ok || !data.success) {
+                    throw new Error(data.detail || '处理失败');
+                }
 
-    function renderDashboardCard(config) {
-        const container = document.getElementById('customDashboards');
-        const card = document.createElement('div');
-        card.className = 'dashboard-card';
-        card.id = `dashboard-${config.id}`;
+                analysisData.value = data.analysis;
+                filterOptions.value = {};
 
-        const allCols = cleanData.length > 0 ? Object.keys(cleanData[0]) : [];
-        const numCols = allCols.filter(c => columnTypes[c] === 'number');
+                // 获取筛选器选项
+                const filterRes = await fetch('/api/filters');
+                const filterData = await filterRes.json();
+                if (filterData.success) {
+                    filterOptions.value = filterData.filters;
+                    Object.keys(filterData.filters).forEach(f => {
+                        activeFilters[f] = '全部';
+                    });
+                }
 
-        const dimOptions = allCols.map(c => `<option value="${c}">${c}</option>`).join('');
-        const metricOptions = numCols.map(c => `<option value="${c}">${c}</option>`).join('');
+                uploadStatus.value = 'success';
+                statusMessage.value = `处理完成，共 ${data.rows} 行有效数据`;
 
-        card.innerHTML = `
-            <div class="dashboard-card-header">
-                <div class="dashboard-card-title"><span class="num">${config.id}</span> 自定义看板 ${config.id}</div>
-                <div style="display:flex;gap:8px;align-items:center;">
-                    <button class="chart-export-btn" onclick="exportCustomChart(${config.id})">导出 ↓</button>
-                    <button class="dashboard-delete-btn" onclick="removeDashboard(${config.id})">删除</button>
-                </div>
-            </div>
-            <div class="dashboard-controls">
-                <div class="dc-group">
-                    <span class="dc-label">维度:</span>
-                    <select class="dc-select" id="dc-dim-${config.id}" onchange="updateDashboard(${config.id})">
-                        <option value="">选择维度</option>
-                        ${dimOptions}
-                    </select>
-                </div>
-                <div class="dc-group">
-                    <span class="dc-label">指标:</span>
-                    <select class="dc-select" id="dc-metric-${config.id}" onchange="updateDashboard(${config.id})">
-                        <option value="">选择指标</option>
-                        ${metricOptions}
-                    </select>
-                </div>
-                <div class="dc-group">
-                    <span class="dc-label">聚合:</span>
-                    <select class="dc-select" id="dc-agg-${config.id}" onchange="updateDashboard(${config.id})">
-                        <option value="sum">求和</option>
-                        <option value="avg">平均值</option>
-                        <option value="count">计数</option>
-                    </select>
-                </div>
-                <div class="dc-group">
-                    <span class="dc-label">图表:</span>
-                    <select class="dc-select" id="dc-chart-${config.id}" onchange="updateDashboard(${config.id})">
-                        <option value="bar">柱状图</option>
-                        <option value="line">折线图</option>
-                        <option value="pie">饼图</option>
-                    </select>
-                </div>
-                <div class="dc-group">
-                    <span class="dc-label">日期:</span>
-                    <button class="dc-date-btn active" data-range="all" onclick="setDateRange(${config.id}, 'all', this)">全部</button>
-                    <button class="dc-date-btn" data-range="7d" onclick="setDateRange(${config.id}, '7d', this)">近7天</button>
-                    <button class="dc-date-btn" data-range="30d" onclick="setDateRange(${config.id}, '30d', this)">近30天</button>
-                </div>
-            </div>
-            <div id="dc-chart-container-${config.id}" class="dashboard-chart"></div>
-        `;
-
-        container.appendChild(card);
-    }
-
-    function removeDashboard(id) {
-        dashboards = dashboards.filter(d => d.id !== id);
-        const card = document.getElementById(`dashboard-${id}`);
-        if (card) card.remove();
-
-        const chartKey = `custom-${id}`;
-        if (charts[chartKey]) {
-            charts[chartKey].dispose();
-            delete charts[chartKey];
+                // 渲染图表
+                await nextTick();
+                renderCharts();
+            } catch (err) {
+                uploadStatus.value = 'error';
+                statusMessage.value = err.message;
+            } finally {
+                processing.value = false;
+            }
         }
 
-        if (dashboards.length === 0) {
-            document.getElementById('customDashboards').classList.remove('show');
-            document.getElementById('addDashboardBtn').classList.remove('show');
-            document.getElementById('layerCustomTitle').style.display = 'none';
-        }
-    }
-
-    function setDateRange(id, range, btn) {
-        const config = dashboards.find(d => d.id === id);
-        if (!config) return;
-        config.dateRange = range === 'all' ? null : range;
-
-        const card = document.getElementById(`dashboard-${id}`);
-        if (card) {
-            card.querySelectorAll('.dc-date-btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-        }
-        updateDashboard(id);
-    }
-
-    function updateDashboard(id) {
-        const config = dashboards.find(d => d.id === id);
-        if (!config) return;
-
-        config.dimension = document.getElementById(`dc-dim-${id}`).value;
-        config.metric = document.getElementById(`dc-metric-${id}`).value;
-        config.aggFn = document.getElementById(`dc-agg-${id}`).value;
-        config.chartType = document.getElementById(`dc-chart-${id}`).value;
-
-        if (!config.dimension || !config.metric) {
-            const chartEl = document.getElementById(`dc-chart-container-${id}`);
-            if (chartEl) chartEl.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#9CA3AF;font-size:13px;">请选择维度和指标</div>';
-            return;
+        async function refreshAnalysis() {
+            if (!analysisData.value) return;
+            await processData();
         }
 
-        const filtered = filterByRegionDealer(cleanData,
-            document.getElementById('filterRegion').value,
-            document.getElementById('filterDealer').value);
-        const data = filterByDate(filtered, config.dateRange);
-        const result = aggregateDashboard(data, config);
-
-        if (!result || result.length === 0) {
-            const chartEl = document.getElementById(`dc-chart-container-${id}`);
-            if (chartEl) chartEl.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#9CA3AF;font-size:13px;">无数据</div>';
-            return;
+        function changeGranularity(g) {
+            granularity.value = g;
+            refreshAnalysis();
         }
 
-        const autoType = recommendChartType(config.dimension, data);
-        const chartType = config.chartType || autoType;
+        // ─── 图表渲染 ───────────────────────────────────────
+        function renderCharts() {
+            // 销毁旧实例
+            Object.values(chartInstances.value).forEach(c => c.dispose());
+            chartInstances.value = {};
 
-        const chartEl = document.getElementById(`dc-chart-container-${id}`);
-        if (!chartEl) return;
+            const d = analysisData.value;
+            if (!d) return;
 
-        const chartKey = `custom-${id}`;
-        if (!charts[chartKey]) {
-            charts[chartKey] = echarts.init(chartEl, null, { renderer: 'canvas' });
+            if (d.trend) renderTrendChart(d.trend);
+            if (d.kpi && d.kpi.rep_kpi) renderKPIChart(d.kpi);
+            if (d.region) renderBarChart(d.region, 'chart-region', '区域业绩分布');
+            if (d.ranking) renderBarChart(d.ranking, 'chart-ranking', '销售排行榜');
+            if (d.dealer) renderBarChart(d.dealer, 'chart-dealer', '客户贡献度');
+            if (d.product) renderPieChart(d.product);
+            if (d.order_value) renderHistogram(d.order_value);
+            if (d.heatmap) renderHeatmap(d.heatmap);
         }
 
-        const names = result.map(r => r.name);
-        const values = result.map(r => Math.round(r.value));
+        function renderTrendChart(data) {
+            const el = document.getElementById('chart-trend');
+            if (!el || !data.data) return;
+            const chart = echarts.init(el);
+            chartInstances.value['chart-trend'] = chart;
 
-        const tooltip = { trigger: 'item', backgroundColor: '#1A1D21', textStyle: { color: '#FFF' } };
-        const axisLabel = { interval: 'auto', rotate: 45, hideOverlap: true, fontSize: 11, color: '#374151' };
+            const periods = data.data.map(d => d.period);
+            const revenues = data.data.map(d => d.revenue);
+            const orders = data.data.map(d => d.orders);
 
-        let option;
-        if (chartType === 'pie') {
-            option = {
-                tooltip: { trigger: 'item', backgroundColor: '#1A1D21', textStyle: { color: '#FFF' } },
-                color: colorPalette,
+            chart.setOption({
+                tooltip: { trigger: 'axis' },
+                legend: { data: ['销售额', '订单量'].filter(Boolean) },
+                grid: { left: 80, right: 40, top: 40, bottom: 40 },
+                xAxis: { type: 'category', data: periods, axisLabel: { rotate: 30 } },
+                yAxis: [
+                    { type: 'value', name: '销售额', position: 'left' },
+                    { type: 'value', name: '订单量', position: 'right' }
+                ],
+                series: [
+                    {
+                        name: '销售额', type: 'line', areaStyle: { opacity: 0.15 },
+                        data: revenues, smooth: true, itemStyle: { color: '#3B82F6' }
+                    },
+                    ...(orders.some(v => v !== null && v !== undefined) ? [{
+                        name: '订单量', type: 'bar', yAxisIndex: 1,
+                        data: orders, itemStyle: { color: '#10B981' }
+                    }] : [])
+                ]
+            });
+        }
+
+        function renderKPIChart(data) {
+            const el = document.getElementById('chart-kpi');
+            if (!el || !data.rep_kpi) return;
+            const chart = echarts.init(el);
+            chartInstances.value['chart-kpi'] = chart;
+
+            const names = data.rep_kpi.map(d => d.name);
+            const rates = data.rep_kpi.map(d => d.achievement_rate || 0);
+
+            chart.setOption({
+                tooltip: { trigger: 'axis', formatter: p => `${p[0].name}<br/>达成率: ${p[0].value}%` },
+                grid: { left: 100, right: 60, top: 20, bottom: 20 },
+                xAxis: { type: 'value', max: Math.max(120, ...rates.map(v => v * 1.2)), axisLabel: { formatter: '{value}%' } },
+                yAxis: { type: 'category', data: names },
                 series: [{
-                    type: 'pie', center: ['50%', '55%'], radius: ['35%', '65%'],
-                    avoidLabelOverlap: true,
-                    label: { show: true, formatter: '{b}\n{d}%', fontSize: 11, color: '#374151' },
-                    labelLine: { length: 12, length2: 10, lineStyle: { color: '#6B7280' } },
-                    data: names.map((n, i) => ({ name: n, value: values[i] })),
-                }],
-            };
-        } else if (chartType === 'line') {
-            option = {
-                grid: { top: 20, right: 20, bottom: 60, left: 55 },
-                color: colorPalette,
-                tooltip: { trigger: 'axis', backgroundColor: '#1A1D21', textStyle: { color: '#FFF' } },
-                xAxis: { type: 'category', data: names, axisLine: { lineStyle: { color: '#D1D5DB' } }, axisLabel, axisTick: { show: false } },
-                yAxis: { type: 'value', splitLine: { lineStyle: { color: '#F0F2F5' } }, axisLabel: { fontSize: 11, color: '#374151' } },
-                series: [{ type: 'line', data: values, smooth: true, areaStyle: { opacity: 0.12 }, symbol: 'circle', symbolSize: 5 }],
-            };
-        } else {
-            option = {
-                grid: { top: 20, right: 20, bottom: 60, left: 55 },
-                color: colorPalette,
-                tooltip: { trigger: 'axis', backgroundColor: '#1A1D21', textStyle: { color: '#FFF' } },
-                xAxis: { type: 'category', data: names, axisLine: { lineStyle: { color: '#D1D5DB' } }, axisLabel, axisTick: { show: false } },
-                yAxis: { type: 'value', splitLine: { lineStyle: { color: '#F0F2F5' } }, axisLabel: { fontSize: 11, color: '#374151' } },
-                series: [{ type: 'bar', data: values, barWidth: '50%' }],
-            };
+                    type: 'bar', data: rates,
+                    itemStyle: {
+                        color: p => p.value >= 100 ? '#10B981' : '#EF4444'
+                    },
+                    label: { show: true, position: 'right', formatter: '{c}%' }
+                }]
+            });
         }
 
-        charts[chartKey].setOption(option, true);
-        charts[chartKey].resize();
-    }
+        function renderBarChart(data, chartId, title) {
+            const el = document.getElementById(chartId);
+            if (!el || !data.data) return;
+            const chart = echarts.init(el);
+            chartInstances.value[chartId] = chart;
 
-    // ═══════════════════════════════════════════════════════════
-    //  工具函数
-    // ═══════════════════════════════════════════════════════════
-    function showStatus(icon, msg, detail) {
-        document.getElementById('statusIcon').textContent = icon;
-        document.getElementById('statusMsg').textContent = msg;
-        document.getElementById('statusDetail').textContent = detail;
-        document.getElementById('statusBar').classList.add('show');
-    }
+            const names = data.data.map(d => d.name);
+            const values = data.data.map(d => d.total_revenue);
 
-    function hideAll() {
-        ['filters', 'chartsGrid', 'insights', 'qualityPanel', 'kpiRow', 'alertSection'].forEach(id => {
-            document.getElementById(id).classList.remove('show');
+            chart.setOption({
+                tooltip: { trigger: 'axis', formatter: p => {
+                    const d = p[0];
+                    return `${d.name}<br/>销售额: ${formatNum(d.value)}<br/>占比: ${data.data[d.dataIndex]?.share || 0}%`;
+                }},
+                grid: { left: 120, right: 60, top: 20, bottom: 20 },
+                xAxis: { type: 'value' },
+                yAxis: { type: 'category', data: names.reverse() },
+                series: [{
+                    type: 'bar', data: values.reverse(),
+                    itemStyle: { color: '#3B82F6' },
+                    label: { show: true, position: 'right', formatter: p => formatNum(p.value) }
+                }]
+            });
+        }
+
+        function renderPieChart(data) {
+            const el = document.getElementById('chart-product');
+            if (!el || !data.data) return;
+            const chart = echarts.init(el);
+            chartInstances.value['chart-product'] = chart;
+
+            const pieData = data.data.map(d => ({
+                name: d.name, value: d.total_revenue, itemStyle: { color: getABCColor(d.abc_class) }
+            }));
+
+            chart.setOption({
+                tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+                legend: { orient: 'vertical', right: 10, top: 'center' },
+                series: [{
+                    type: 'pie', radius: ['40%', '70%'], center: ['40%', '50%'],
+                    data: pieData,
+                    label: { formatter: '{b}\n{d}%' }
+                }]
+            });
+        }
+
+        function renderHistogram(data) {
+            const el = document.getElementById('chart-order-value');
+            if (!el || !data.data) return;
+            const chart = echarts.init(el);
+            chartInstances.value['chart-order-value'] = chart;
+
+            const ranges = data.data.map(d => d.range);
+            const counts = data.data.map(d => d.order_count);
+
+            chart.setOption({
+                tooltip: { trigger: 'axis' },
+                grid: { left: 80, right: 40, top: 40, bottom: 60 },
+                xAxis: { type: 'category', data: ranges, axisLabel: { rotate: 30 } },
+                yAxis: { type: 'value', name: '订单数' },
+                series: [{
+                    type: 'bar', data: counts,
+                    itemStyle: { color: '#8B5CF6' }
+                }]
+            });
+        }
+
+        function renderHeatmap(data) {
+            const el = document.getElementById('chart-heatmap');
+            if (!el || !data.matrix) return;
+            const chart = echarts.init(el);
+            chartInstances.value['chart-heatmap'] = chart;
+
+            const heatmapData = [];
+            data.matrix.forEach((row, yi) => {
+                data.months.forEach((m, xi) => {
+                    heatmapData.push([xi, yi, row[String(m)] || 0]);
+                });
+            });
+
+            chart.setOption({
+                tooltip: { formatter: p => `${data.years[p.data[1]]}年${data.months[p.data[0]]}月<br/>销售额: ${formatNum(p.data[2])}` },
+                grid: { left: 60, right: 40, top: 20, bottom: 40 },
+                xAxis: { type: 'category', data: data.months.map(m => m + '月') },
+                yAxis: { type: 'category', data: data.years.map(y => y + '年') },
+                visualMap: { min: 0, calculable: true, orient: 'horizontal', left: 'center', bottom: 0 },
+                series: [{
+                    type: 'heatmap', data: heatmapData,
+                    label: { show: true, formatter: p => formatNum(p.data[2]) }
+                }]
+            });
+        }
+
+        // ─── 工具函数 ───────────────────────────────────────
+        function formatNumber(n) {
+            if (n === null || n === undefined) return '--';
+            if (typeof n === 'number') {
+                if (Math.abs(n) >= 100000000) return (n / 100000000).toFixed(2) + '亿';
+                if (Math.abs(n) >= 10000) return (n / 10000).toFixed(2) + '万';
+                return n.toLocaleString('zh-CN', { maximumFractionDigits: 2 });
+            }
+            return n;
+        }
+
+        function formatNum(n) {
+            if (!n && n !== 0) return '0';
+            if (Math.abs(n) >= 10000) return (n / 10000).toFixed(1) + '万';
+            return n.toLocaleString();
+        }
+
+        function getAchievementClass(rate) {
+            if (rate >= 100) return 'green';
+            if (rate >= 80) return '';
+            return 'red';
+        }
+
+        function getABCColor(cls) {
+            const colors = { 'A': '#3B82F6', 'B': '#F59E0B', 'C': '#9CA3AF' };
+            return colors[cls] || '#3B82F6';
+        }
+
+        async function logout() {
+            await fetch('/api/auth/logout', { method: 'POST' });
+            window.location.href = '/';
+        }
+
+        // ─── 窗口 resize ───────────────────────────────────────
+        window.addEventListener('resize', () => {
+            Object.values(chartInstances.value).forEach(c => c?.resize());
         });
-        ['layerKpiTitle', 'layerChartTitle'].forEach(id => {
-            document.getElementById(id).style.display = 'none';
-        });
-    }
 
-    function exportChart(type) {
-        const chart = charts[type];
-        if (!chart) return;
-        const url = chart.getDataURL({ type: 'png', pixelRatio: 2 });
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${type}_chart_${new Date().toISOString().slice(0,10)}.png`;
-        a.click();
+        return {
+            username, filename, dragover, uploadStatus, statusMessage,
+            columns, preview, autoMapping, columnSuggestions, processing,
+            standardFields, fieldMapping, analysisData, filterOptions, activeFilters,
+            granularity, chartConfigs, fieldNames, missingRequired, canProcess,
+            handleFileSelect, handleDrop, processData, refreshAnalysis,
+            changeGranularity, resetMapping, onMappingChange, logout,
+            formatNumber, getAchievementClass,
+        };
     }
-
-    function exportCustomChart(id) {
-        const chartKey = `custom-${id}`;
-        const chart = charts[chartKey];
-        if (!chart) return;
-        chart.setOption({ backgroundColor: '#FFFFFF' });
-        const url = chart.getDataURL({ type: 'png', pixelRatio: 2, backgroundColor: '#FFFFFF' });
-        chart.setOption({ backgroundColor: 'transparent' });
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `自定义看板${id}_${new Date().toISOString().slice(0,10)}.png`;
-        a.click();
-    }
-
-    // 窗口 resize 时重绘所有图表
-    window.addEventListener('resize', () => {
-        Object.values(charts).forEach(c => { try { c.resize(); } catch(e) {} });
-    });
-    </script>
+}).mount('#app');
+</script>
 </body>
 </html>

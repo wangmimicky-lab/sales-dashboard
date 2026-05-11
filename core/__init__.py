@@ -1,14 +1,17 @@
-from .config import STANDARD_FIELDS, ALIAS_TO_STANDARD, FIELD_ALIASES, AnalysisConfig
+"""
+销售数据分析核心模块
+"""
 from .field_mapper import FieldMapper
 from .cleaner import DataCleaner
 from .analyzer import Analyzer
+from .schema import STANDARD_SCHEMA, REQUIRED_FIELDS, OPTIONAL_FIELDS, get_schema_info
 
 __all__ = [
-    "STANDARD_FIELDS",
-    "ALIAS_TO_STANDARD",
-    "FIELD_ALIASES",
-    "AnalysisConfig",
     "FieldMapper",
     "DataCleaner",
     "Analyzer",
+    "STANDARD_SCHEMA",
+    "REQUIRED_FIELDS",
+    "OPTIONAL_FIELDS",
+    "get_schema_info",
 ]

@@ -11,17 +11,17 @@ from typing import Optional
 
 import polars as pl
 from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile, Response
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
-from core import FieldMapper, DataCleaner, Analyzer, AnalysisConfig
+from core import FieldMapper, DataCleaner, Analyzer, get_schema_info
 
 # ─── 认证模块 ──────────────────────────────────────────────────
 import auth
 
 # ─── FastAPI 应用 ──────────────────────────────────────────────
-app = FastAPI(title="销售数据仪表板", version="0.1.0")
+app = FastAPI(title="销售数据仪表板", version="2.0.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -35,7 +35,7 @@ app.add_middleware(
 UPLOAD_DIR = Path(__file__).parent / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
 
-# 当前会话数据（MVP 单期覆盖）
+# 当前会话数据
 _session_data: dict = {}
 
 
@@ -54,9 +54,6 @@ async def login(username: str = Form(...), password: str = Form(...)):
         "username": username,
         "expire_date": user["expire_date"],
     }
-
-    # 返回 Token 给前端存储（Cookie 模式）
-    from fastapi.responses import JSONResponse
     resp = JSONResponse(content=response)
     resp.set_cookie(
         key="access_token",
@@ -71,7 +68,6 @@ async def login(username: str = Form(...), password: str = Form(...)):
 @app.post("/api/auth/logout")
 async def logout():
     """登出"""
-    from fastapi.responses import JSONResponse
     resp = JSONResponse(content={"success": True})
     resp.delete_cookie(key="access_token")
     return resp
@@ -83,6 +79,27 @@ async def get_me(current_user: dict = Depends(auth.get_current_user)):
     return current_user
 
 
+# ─── 新 API: 标准字段集 ────────────────────────────────────────
+
+@app.get("/api/schema")
+async def get_schema(current_user: dict = Depends(auth.get_current_user)):
+    """获取标准字段集定义（供前端展示）"""
+    return {"success": True, "schema": get_schema_info()}
+
+
+# ─── 新 API: 字段匹配建议 ──────────────────────────────────────
+
+@app.post("/api/match-suggestions")
+async def get_match_suggestions(
+    raw_column: str = Form(...),
+    current_user: dict = Depends(auth.get_current_user),
+):
+    """为单个原始列名返回匹配建议"""
+    mapper = FieldMapper()
+    suggestions = mapper.get_match_suggestions(raw_column)
+    return {"success": True, "raw_column": raw_column, "suggestions": suggestions}
+
+
 # ─── 数据上传 & 处理 ──────────────────────────────────────────
 
 @app.post("/api/upload")
@@ -92,9 +109,9 @@ async def upload_file(
 ):
     """
     上传数据文件（CSV/Excel）
-    执行：字段识别 → 数据清洗 → 返回结果摘要
+    执行：字段识别 → 返回原始列名 + 自动匹配建议
+    注意：此时不执行清洗，等用户确认映射后再处理
     """
-    # 保存文件
     file_ext = Path(file.filename).suffix.lower()
     if file_ext not in (".csv", ".xlsx", ".xls"):
         raise HTTPException(status_code=400, detail="仅支持 CSV / Excel 文件")
@@ -116,98 +133,116 @@ async def upload_file(
     if len(df) == 0:
         raise HTTPException(status_code=400, detail="文件为空，无数据行")
 
-    # 字段映射
+    # 字段匹配
     mapper = FieldMapper()
     raw_columns = df.columns
-    mapping = mapper.map_columns(raw_columns)
+    auto_mapping = mapper.map_columns(raw_columns)
 
-    if len(mapping) < 3:
-        raise HTTPException(
-            status_code=400,
-            detail=f"字段识别不足：仅匹配 {len(mapping)} 个字段，至少需要 3 个（订单号、日期、金额）",
-        )
-
-    # 数据清洗
-    cleaner = DataCleaner()
-    df_clean = cleaner.clean(df, mapping)
-
-    if len(df_clean) == 0:
-        raise HTTPException(status_code=400, detail="清洗后无有效数据")
-
-    # 存储到会话
-    _session_data.clear()
-    _session_data["df"] = df_clean
-    _session_data["mapping"] = mapping
-    _session_data["mapper_report"] = mapper.get_report()
-    _session_data["cleaner_report"] = cleaner.get_report()
-    _session_data["filename"] = file.filename
-    _session_data["uploaded_at"] = datetime.now().isoformat()
+    # 为每个原始列生成匹配建议
+    column_suggestions = {}
+    for col in raw_columns:
+        suggestions = mapper.get_match_suggestions(col)
+        column_suggestions[col] = suggestions
 
     return {
         "success": True,
         "filename": file.filename,
-        "rows": len(df_clean),
-        "columns": len(df_clean.columns),
-        "mapping": mapper.get_report(),
-        "cleaning": cleaner.get_report(),
+        "rows": len(df),
+        "columns": raw_columns,
+        "auto_mapping": auto_mapping,  # {标准字段: 原始列名}
+        "column_suggestions": column_suggestions,  # {原始列名: [建议列表]}
+        "preview": df.head(5).to_dicts(),  # 前5行预览
     }
 
 
-# ─── 分析数据接口 ─────────────────────────────────────────────
+# ─── 新 API: 应用映射并执行分析 ───────────────────────────────
+
+@app.post("/api/process")
+async def process_data(
+    mapping_config: str = Form(...),  # JSON: {标准字段: 原始列名}
+    granularity: str = Form("auto"),
+    filters: str = Form("{}"),
+    current_user: dict = Depends(auth.get_current_user),
+):
+    """
+    根据用户确认的映射配置执行数据处理和分析。
+    mapping_config: JSON 字符串 {标准字段名: 原始列名}
+    """
+    import json
+
+    if "df" not in _session_data:
+        raise HTTPException(status_code=400, detail="请先上传数据文件")
+
+    # 解析映射配置
+    try:
+        mapping = json.loads(mapping_config)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="映射配置格式错误")
+
+    if len(mapping) < 3:
+        raise HTTPException(status_code=400, detail="至少需要映射 3 个字段（日期、金额、订单号）")
+
+    # 检查必需字段
+    from core import REQUIRED_FIELDS
+    missing = REQUIRED_FIELDS - set(mapping.keys())
+    if missing:
+        raise HTTPException(
+            status_code=400,
+            detail=f"缺少必需字段映射: {', '.join(missing)}",
+        )
+
+    # 执行数据处理
+    cleaner = DataCleaner()
+    df_raw = _session_data["df"]
+    df_clean = cleaner.process_data(df_raw, mapping)
+
+    if len(df_clean) == 0:
+        raise HTTPException(status_code=400, detail="处理后可用数据为空")
+
+    # 更新会话
+    _session_data["df_clean"] = df_clean
+    _session_data["mapping"] = mapping
+    _session_data["cleaner_report"] = cleaner.get_report()
+
+    # 执行分析
+    try:
+        filter_dict = json.loads(filters) if filters else {}
+    except json.JSONDecodeError:
+        filter_dict = {}
+
+    analyzer = Analyzer()
+    analysis_result = analyzer.analyze_all(df_clean, granularity=granularity, filters=filter_dict)
+
+    return {
+        "success": True,
+        "rows": len(df_clean),
+        "columns": list(df_clean.columns),
+        "mapping": mapping,
+        "cleaning": cleaner.get_report(),
+        "analysis": analysis_result,
+    }
+
+
+# ─── 筛选器选项 ───────────────────────────────────────────────
 
 @app.get("/api/filters")
 async def get_filters(
     current_user: dict = Depends(auth.get_current_user),
 ):
-    """获取筛选器选项（经销商列表、区域列表）"""
-    if "df" not in _session_data:
-        raise HTTPException(status_code=400, detail="请先上传数据文件")
+    """获取筛选器选项"""
+    if "df_clean" not in _session_data:
+        raise HTTPException(status_code=400, detail="请先上传并处理数据")
 
-    df = _session_data["df"]
+    df = _session_data["df_clean"]
     filters = {}
 
-    if "customer_name" in df.columns:
-        filters["dealers"] = sorted(df["customer_name"].drop_nulls().unique().to_list())
-
-    if "region" in df.columns:
-        filters["regions"] = sorted(df["region"].drop_nulls().unique().to_list())
+    for dim_field in ["customer_name", "region", "category", "sales_rep"]:
+        if dim_field in df.columns:
+            filters[dim_field] = sorted(
+                df[dim_field].drop_nulls().unique().to_list()
+            )
 
     return {"success": True, "filters": filters}
-
-
-@app.get("/api/analysis")
-async def get_analysis(
-    granularity: str = "auto",
-    dealer: Optional[str] = None,
-    region: Optional[str] = None,
-    current_user: dict = Depends(auth.get_current_user),
-):
-    """
-    获取分析数据（4 大模块）
-    支持按经销商、区域筛选
-    """
-    if "df" not in _session_data:
-        raise HTTPException(status_code=400, detail="请先上传数据文件")
-
-    df = _session_data["df"].clone()
-
-    # 应用筛选
-    if dealer and dealer != "全部":
-        if "customer_name" in df.columns:
-            df = df.filter(pl.col("customer_name") == dealer)
-
-    if region and region != "全部":
-        if "region" in df.columns:
-            df = df.filter(pl.col("region") == region)
-
-    if len(df) == 0:
-        return {"success": True, "message": "筛选后无数据"}
-
-    # 执行分析
-    analyzer = Analyzer()
-    result = analyzer.analyze_all(df, granularity=granularity)
-
-    return {"success": True, "data": result}
 
 
 # ─── 前端静态文件 ─────────────────────────────────────────────
